@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.DS_Store
+.pytest_cache/
+.idea/
+.vscode/
+
+# Real bank statements and email samples — never commit personal financial data
+input/
+
+# Build artifacts
+backend/*.egg-info/
+
+# Forecast return cache (regenerated at runtime from yfinance)
+backend/app/services/forecast/.forecast_cache/

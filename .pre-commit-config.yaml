@@ -1,0 +1,20 @@
+# Run `pre-commit install` once to enable. Mirrors what CI checks.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        name: ruff (backend)
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        name: ruff-format (backend)
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (frontend)
+        entry: bash -c 'cd frontend && npx prettier --write "$@"' --
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx|css)$
