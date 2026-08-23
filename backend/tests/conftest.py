@@ -5,8 +5,19 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.auth import get_current_user
 from app.db import Base
+from app.main import app
 from app.services.fx.provider import FxProvider
+
+
+@pytest.fixture(autouse=True)
+def _auth_override():
+    """Every router except /health and /auth is behind get_current_user; tests
+    exercise the endpoints, not the auth layer, so bypass it globally."""
+    app.dependency_overrides[get_current_user] = lambda: "test"
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture

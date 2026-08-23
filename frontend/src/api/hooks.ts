@@ -15,6 +15,7 @@ import type { ForecastRequest, TxnType } from './client'
 
 export const queryKeys = {
   spendingSummary: (params: SpendingParams = {}) => ['spending', 'summary', params] as const,
+  spendingPace: (throughDay: number) => ['spending', 'pace', throughDay] as const,
   networthCurrent: () => ['networth', 'current'] as const,
   networthHistory: () => ['networth', 'history'] as const,
   holdings: () => ['holdings'] as const,
@@ -23,12 +24,23 @@ export const queryKeys = {
   transactions: (params: TxnParams) => ['transactions', params] as const,
   forecast: (params: ForecastRequest) => ['forecast', params] as const,
   assumptions: () => ['assumptions'] as const,
+  investorProfile: () => ['portfolioHealth', 'profile'] as const,
+  portfolioReviewLatest: () => ['portfolioHealth', 'review', 'latest'] as const,
+  portfolioReviews: () => ['portfolioHealth', 'reviews'] as const,
+  securityMetadata: () => ['portfolioHealth', 'metadata'] as const,
 }
 
 interface SpendingParams {
   start?: string
   end?: string
   account_id?: number
+}
+
+export function useSpendingPace(throughDay: number) {
+  return useQuery({
+    queryKey: queryKeys.spendingPace(throughDay),
+    queryFn: () => api.spending.pace(throughDay),
+  })
 }
 
 export function useSpendingSummary(params: SpendingParams = {}) {
@@ -101,6 +113,35 @@ export function useForecast(params: ForecastRequest) {
     queryKey: queryKeys.forecast(params),
     queryFn: () => api.forecast.run(params),
     placeholderData: (prev) => prev, // keep bands on screen while a new run computes
+  })
+}
+
+// ---- Portfolio Health Review ----
+export function useInvestorProfile() {
+  return useQuery({
+    queryKey: queryKeys.investorProfile(),
+    queryFn: () => api.portfolioHealth.getProfile(),
+  })
+}
+
+export function usePortfolioReviewLatest() {
+  return useQuery({
+    queryKey: queryKeys.portfolioReviewLatest(),
+    queryFn: () => api.portfolioHealth.latestReview(),
+  })
+}
+
+export function usePortfolioReviews() {
+  return useQuery({
+    queryKey: queryKeys.portfolioReviews(),
+    queryFn: () => api.portfolioHealth.reviews(),
+  })
+}
+
+export function useSecurityMetadata() {
+  return useQuery({
+    queryKey: queryKeys.securityMetadata(),
+    queryFn: () => api.portfolioHealth.listMetadata(),
   })
 }
 

@@ -103,7 +103,7 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 
 - Only filter on rows: `archived = false` (plus optional date/account range).
 - Aggregates are net per category (signed-base sum). Categories with a negative net are **still shown** — they're a signal that something is miscategorized or the date window is wrong, not noise to hide.
-- **Salary** is the only category excluded from the spending series; its positive inflows feed `by_month_income`. Salary is assigned manually (no auto-detection).
+- Categories flagged **`is_income`** (`Category.is_income`; seeded: Salary) are excluded from the spending series; their positive inflows feed `by_month_income`. The flag — not the category name — drives the split, so renames are safe. Income categories are assigned manually (no auto-detection).
 
 ## Net-worth model (Phase 5)
 
@@ -121,7 +121,7 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 
 ## Known gotchas
 
-- **FX_API_KEY**: `exchangerate.host` now requires a paid key. Without one, `to_base` logs a warning and uses hardcoded approximate rates from `_FALLBACK_RATES` (EUR/CLP ≈ 1050, USD/CLP ≈ 950, etc.). The app stays usable but historical FX is approximate.
+- **FX providers**: `FX_PROVIDER=free` (default) is `CurrencyApiProvider` — the fawazahmed0/currency-api CDN dataset (no key, fast, daily snapshots incl. weekends, covers CLP; occasional gap days are handled by a ≤3-day walk-back). Alternatives: `mindicador` (official BCCh fixings + frankfurter for non-CLP pairs — authoritative but mindicador.cl is slow/flaky) and `exchangerate_host` (needs a paid `FX_API_KEY`). Fully offline, `to_base` still falls back to hardcoded `_FALLBACK_RATES` (never persisted); `POST /fx/rerate` later backfills real historical rates onto transactions and the fx_rates cache (idempotent — re-run if it reports transient failures). The 2026-06-10 backfill re-rated all 1,397 foreign-currency rows that had been sitting on fallback rates.
 - **Ollama is on by default** (`OLLAMA_ENABLED=true`). The cascade gracefully skips it if unreachable. The user has `llama3.1:8b` installed locally.
 - **In-memory SQLite tests need `StaticPool`** so multiple sessions share one connection — otherwise tables disappear between sessions. See `tests/test_endpoints_phase4.py`.
 - **`category_rules` writeback flushes per row** (`db.flush()` inside `_writeback`) so same-batch repeat merchants don't collide on the unique constraint.

@@ -26,9 +26,9 @@ from .provider import FxProvider, get_provider
 log = logging.getLogger(__name__)
 
 # Last-ditch approximate mid-market rates (1 base = X quote). Only used when the
-# real provider is unreachable AND no cached rate exists. These exist so the app
-# remains usable offline / without an API key; the user should set FX_API_KEY for
-# accurate historical FX.
+# real provider is unreachable AND no cached rate exists — i.e. fully offline.
+# Transactions imported on a fallback rate can be corrected later with
+# POST /fx/rerate once the provider is reachable again.
 _FALLBACK_RATES: dict[tuple[str, str], Decimal] = {
     ("EUR", "CLP"): Decimal("1050"),
     ("USD", "CLP"): Decimal("950"),
@@ -74,16 +74,19 @@ def get_rate(
     provider = provider or get_provider()
     try:
         rate = provider.fetch(lookup_date, base, quote)
-    except (LookupError, Exception) as e:  # noqa: BLE001 — last-resort fallback
+    except Exception as e:  # noqa: BLE001 — last-resort fallback
         fallback = _FALLBACK_RATES.get((base, quote))
         if fallback is None:
             raise
         log.warning(
-            "FX provider unreachable for %s->%s on %s (%s); using fallback rate %s. "
-            "Set FX_API_KEY for accurate historical FX.",
+            "FX provider unreachable for %s->%s on %s (%s); using approximate "
+            "fallback rate %s. Run POST /fx/rerate once back online to correct "
+            "transactions imported on fallback rates.",
             base, quote, lookup_date, e, fallback,
         )
-        rate = fallback
+        # Never persist fallback rates: caching one would permanently shadow a
+        # later successful provider fetch for this (date, base, quote).
+        return fallback
     db.add(FxRate(date=lookup_date, base_currency=base, quote_currency=quote, rate=rate))
     db.commit()
     return rate

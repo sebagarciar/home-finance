@@ -66,7 +66,7 @@ def fetch_santander_emails(
         results: list[tuple[str, bytes]] = []
 
         for uid in uids:
-            typ, msg_data = conn.uid("FETCH", uid, "(BODY.PEEK[])")  # type: ignore[arg-type]
+            typ, msg_data = conn.uid("FETCH", uid, "(BODY.PEEK[])")
             if typ != "OK" or not msg_data:
                 continue
             for part in msg_data:
@@ -114,9 +114,11 @@ def archive_santander_emails(
         for uid in uids:
             uid_b = uid.encode()
             try:
+                # Mark \Seen before COPY so the copy in General inherits the flag.
+                conn.uid("STORE", uid_b, "+FLAGS", "\\Seen")  # type: ignore[arg-type]
                 typ, _ = conn.uid("COPY", uid_b, _ARCHIVE_LABEL)  # type: ignore[arg-type]
                 if typ == "OK":
-                    conn.uid("STORE", uid_b, "+FLAGS", "\\Seen \\Deleted")  # type: ignore[arg-type]
+                    conn.uid("STORE", uid_b, "+FLAGS", "\\Deleted")  # type: ignore[arg-type]
                 else:
                     logger.warning("IMAP COPY to %r failed for uid %s", _ARCHIVE_LABEL, uid)
             except imaplib.IMAP4.error as exc:

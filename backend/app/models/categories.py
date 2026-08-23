@@ -21,6 +21,10 @@ class Category(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Income categories are excluded from the spending series; their positive
+    # inflows feed the income series instead. A flag (not a hardcoded name)
+    # so renaming the category can't silently break the income/spending split.
+    is_income: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
 
 class CategoryRule(Base):

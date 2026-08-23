@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -11,8 +11,45 @@ import {
 import { useCurrency } from '../lib/currency'
 import { chart } from '../design/chartTheme'
 import { MoneyTooltip } from '../components/MoneyTooltip'
+import { PageLoading } from '../components/PageLoading'
 
+// Health Review is its own chunk — it's the largest page and most visits stay
+// on the overview sub-tab.
+const PortfolioHealth = lazy(() =>
+  import('./portfolio-health').then((m) => ({ default: m.PortfolioHealth })),
+)
+
+type PortfolioView = 'overview' | 'health'
+
+// Wrapper: the net-worth/holdings overview and the Portfolio Health Review live
+// behind one sidebar entry, switched by an in-page sub-tab (mirrors Forecast).
 export function Portfolio() {
+  const [view, setView] = useState<PortfolioView>('overview')
+  return (
+    <>
+      <div className="subtabs">
+        {(['overview', 'health'] as const).map((v) => (
+          <button
+            key={v}
+            className={`subtab${view === v ? ' active' : ''}`}
+            onClick={() => setView(v)}
+          >
+            {v === 'overview' ? 'Overview' : 'Health Review'}
+          </button>
+        ))}
+      </div>
+      {view === 'overview' ? (
+        <PortfolioOverview />
+      ) : (
+        <Suspense fallback={<PageLoading />}>
+          <PortfolioHealth />
+        </Suspense>
+      )}
+    </>
+  )
+}
+
+function PortfolioOverview() {
   const { format, formatCompact, mask } = useCurrency()
   const qc = useQueryClient()
   const networthQ = useNetworthCurrent()

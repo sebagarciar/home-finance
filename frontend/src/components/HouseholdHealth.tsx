@@ -1,18 +1,15 @@
 // Household-health strip: spend-vs-usual, cash runway, and currency exposure.
 // Reads the shared spending-summary + net-worth caches (no extra fetches).
 import { useMemo } from 'react'
-import { useSpendingSummary, useNetworthCurrent } from '../api/hooks'
+import { useSpendingSummary, useNetworthCurrent, useSpendingPace } from '../api/hooks'
 import { useCurrency } from '../lib/currency'
 
 const TRAILING_MONTHS = 6
 
 type Metrics = {
-  // "Spend vs usual": current month's spend against the trailing average.
   currentMonth: string | null
   currentSpend: number
   usualSpend: number | null
-  deltaPct: number | null
-  // Real average monthly spend (incl. current) — drives the runway tile.
   avgMonthlySpend: number
 }
 
@@ -31,6 +28,8 @@ function currencyColor(code: string, i: number): string {
 export function HouseholdHealth() {
   const summaryQ = useSpendingSummary()
   const networthQ = useNetworthCurrent()
+  const todayDay = new Date().getDate()
+  const paceQ = useSpendingPace(todayDay)
   const { format } = useCurrency()
   const summary = summaryQ.data
   const networth = networthQ.data
@@ -51,15 +50,13 @@ export function HouseholdHealth() {
       priorMonths.length > 0
         ? priorMonths.reduce((s, m) => s + (spendByMonth.get(m) ?? 0), 0) / priorMonths.length
         : null
-    const deltaPct = usualSpend && usualSpend !== 0 ? (currentSpend - usualSpend) / usualSpend : null
-
     // Runway uses real average monthly spend across all recent months,
     // including the current one — independent of the spend-vs-usual window.
     const recent = months.slice(-TRAILING_MONTHS)
     const recentSpend = recent.reduce((s, m) => s + (spendByMonth.get(m) ?? 0), 0)
     const avgMonthlySpend = recent.length > 0 ? recentSpend / recent.length : 0
 
-    return { currentMonth, currentSpend, usualSpend, deltaPct, avgMonthlySpend }
+    return { currentMonth, currentSpend, usualSpend, avgMonthlySpend }
   }, [summary])
 
   const runwayMonths = useMemo(() => {
@@ -80,6 +77,10 @@ export function HouseholdHealth() {
       .sort((a, b) => b.share - a.share)
   }, [networth])
 
+  const expectedByDay = paceQ.data?.expected_by_day != null
+    ? Number(paceQ.data.expected_by_day)
+    : null
+
   if (summaryQ.isLoading || networthQ.isLoading) return <HealthSkeleton />
   if (!metrics && exposure.length === 0) return null
 
@@ -90,7 +91,7 @@ export function HouseholdHealth() {
         <span className="card-meta">Spend vs usual · cash runway · currency exposure</span>
       </div>
       <div className="health-grid">
-        <SpendVsUsual metrics={metrics} format={format} />
+        <SpendingPace metrics={metrics} expectedByDay={expectedByDay} format={format} />
         <Runway months={runwayMonths} />
         <CurrencyExposure exposure={exposure} />
       </div>
@@ -102,29 +103,96 @@ function pct(v: number): string {
   return `${(v * 100).toFixed(0)}%`
 }
 
-function SpendVsUsual({
+function SpendingPace({
   metrics,
+  expectedByDay,
   format,
 }: {
   metrics: Metrics | null
+  expectedByDay: number | null   // actual avg spend from day 1→today across past months
   format: (n: number) => string
 }) {
-  if (!metrics || metrics.deltaPct === null || metrics.usualSpend === null) {
-    return <Metric label="Spend vs usual" value="—" sub="Not enough history yet" />
+  if (!metrics || metrics.usualSpend === null || metrics.usualSpend <= 0) {
+    return <Metric label="Month pace" value="—" sub="Not enough history yet" />
   }
-  // Spending above your usual is the warning direction (red); below is good (green).
-  const tone = metrics.deltaPct > 0.02 ? 'neg' : metrics.deltaPct < -0.02 ? 'pos' : undefined
-  const sign = metrics.deltaPct > 0 ? '+' : ''
+
+  const today = new Date()
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  const daysPct = today.getDate() / daysInMonth
+
+  // Prefer historical partial-month average (captures lumpy day-1 payments like rent).
+  // Fall back to linear interpolation only while the pace endpoint is loading.
+  const expectedByNow = expectedByDay ?? metrics.usualSpend * daysPct
+  const ratio = expectedByNow > 0 ? metrics.currentSpend / expectedByNow : 0
+
+  // >5% over expected pace → red; >5% under → green; otherwise neutral.
+  const tone = ratio > 1.05 ? 'neg' : ratio < 0.95 ? 'pos' : undefined
+  const barColor =
+    tone === 'neg' ? 'var(--negative-text)' : tone === 'pos' ? 'var(--positive-text)' : 'var(--text-muted)'
+
   const monthLabel = new Date(`${metrics.currentMonth}-01T00:00:00`).toLocaleString('en-US', {
     month: 'short',
   })
+
+  const deltaLabel =
+    tone === 'neg'
+      ? `+${((ratio - 1) * 100).toFixed(0)}% over pace`
+      : tone === 'pos'
+        ? `${(((ratio - 1) * 100).toFixed(0))}% under pace`
+        : 'On pace'
+
   return (
-    <Metric
-      label={`Spend vs usual · ${monthLabel}`}
-      value={`${sign}${pct(metrics.deltaPct)}`}
-      tone={tone}
-      sub={`6-mo avg: ${format(metrics.usualSpend)}`}
-    />
+    <div className="health-metric">
+      <div className="tile-label">Month pace · {monthLabel}</div>
+      <div
+        className="tile-value num"
+        style={{
+          color:
+            tone === 'neg'
+              ? 'var(--negative-text)'
+              : tone === 'pos'
+                ? 'var(--positive-text)'
+                : 'var(--text-primary)',
+        }}
+      >
+        {deltaLabel}
+      </div>
+      {/* Bar represents the full month; fill = spend so far; tick = today's position */}
+      <div
+        style={{
+          position: 'relative',
+          height: 6,
+          borderRadius: 999,
+          background: 'var(--surface-raised)',
+          margin: '2px 0',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            width: `${Math.min((metrics.currentSpend / metrics.usualSpend) * 100, 100)}%`,
+            borderRadius: 999,
+            background: barColor,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            left: `${daysPct * 100}%`,
+            top: -3,
+            bottom: -3,
+            width: 2,
+            background: 'var(--text-faint)',
+            borderRadius: 1,
+            transform: 'translateX(-50%)',
+          }}
+        />
+      </div>
+      <div className="health-sub">
+        Spent {format(metrics.currentSpend)} · usual by day {today.getDate()}: {format(expectedByNow)}
+      </div>
+    </div>
   )
 }
 

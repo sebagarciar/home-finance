@@ -933,3 +933,171 @@ input[type="date"] { color-scheme: dark; }
 }
 .fintual-result:hover { border-color: var(--text-muted); }
 .fintual-result .muted { font-size: 11px; }
+
+/* ---- Portfolio Health Review ---- */
+.phr-banner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 16px;
+  border-left: 3px solid var(--surface-border);
+}
+.phr-banner.pos { border-left-color: var(--positive-text); }
+.phr-banner.warn { border-left-color: var(--pending-text); }
+.phr-banner.neg { border-left-color: var(--negative-text); }
+.phr-banner > div:first-child { flex: 1; }
+.phr-status { font-size: 22px; font-weight: 600; color: var(--text-primary); margin-top: 2px; }
+.phr-score-wrap { text-align: center; }
+.phr-score { font-size: 44px; font-weight: 600; line-height: 1; color: var(--text-primary); }
+.phr-banner.pos .phr-score { color: var(--positive-text); }
+.phr-banner.warn .phr-score { color: var(--pending-text); }
+.phr-banner.neg .phr-score { color: var(--negative-text); }
+.phr-actions { display: flex; flex-direction: column; gap: 8px; }
+@media (max-width: 720px) {
+  .phr-banner { flex-direction: column; align-items: stretch; gap: 14px; }
+  .phr-actions { flex-direction: row; }
+}
+
+.phr-meter {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-border);
+  margin-top: 8px;
+  overflow: hidden;
+}
+.phr-meter-fill { height: 100%; background: var(--positive-text); border-radius: 999px; }
+
+.phr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.phr-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.phr-sev {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.phr-sev.sev-high { background: rgba(230,30,73,0.15); color: var(--negative-text); }
+.phr-sev.sev-medium { background: rgba(176,144,0,0.18); color: var(--pending-text); }
+.phr-sev.sev-low { background: rgba(67,134,25,0.15); color: var(--positive-text); }
+
+/* Allocation bars */
+.phr-alloc { display: flex; flex-direction: column; gap: 12px; }
+.phr-alloc-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 56px 80px 72px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.phr-alloc-label { color: var(--text-primary); font-weight: 500; }
+.phr-alloc-val { text-align: right; color: var(--text-primary); font-weight: 600; }
+.phr-alloc-target { color: var(--text-muted); font-size: 12px; }
+.phr-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-border);
+  overflow: hidden;
+}
+.phr-bar-range {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: rgba(255,255,255,0.14);
+}
+.phr-bar-fill {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  background: var(--positive-text);
+  border-radius: 999px;
+}
+.phr-bar-fill.off { background: var(--pending-text); }
+@media (max-width: 720px) {
+  .phr-alloc-row { grid-template-columns: 80px 1fr 48px; }
+  .phr-alloc-target { display: none; }
+}
+
+/* Findings */
+.phr-findings { display: flex; flex-direction: column; gap: 12px; }
+.phr-finding {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--canvas);
+}
+.phr-finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.phr-cat { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.phr-finding-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.phr-finding-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.phr-finding-body.muted { color: var(--text-muted); margin-top: 4px; }
+.phr-finding-body strong { color: var(--text-primary); font-weight: 600; }
+
+/* Questionnaire extras */
+.phr-select {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.phr-check { flex-direction: row; align-items: center; gap: 8px; }
+.phr-check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.phr-expense-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 70px 70px auto;
+  gap: 8px;
+  align-items: center;
+}
+.phr-expense-row input, .phr-expense-row select {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+/* ---- Stage 2: Stress scenario cards ---- */
+.phr-stress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+.phr-stress-card {
+  background: var(--canvas);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phr-stress-card.worst {
+  border-color: rgba(230, 30, 73, 0.35);
+  background: rgba(230, 30, 73, 0.06);
+}
+.phr-stress-icon { font-size: 20px; line-height: 1; margin-bottom: 4px; }
+.phr-stress-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.phr-stress-impact { font-size: 22px; font-weight: 600; line-height: 1.2; margin-top: 6px; }
+.phr-stress-base { font-size: 12px; color: var(--text-muted); }
+.phr-stress-assumption {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-top: 8px;
+  border-top: 1px solid var(--surface-border);
+  padding-top: 8px;
+}

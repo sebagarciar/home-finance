@@ -4,12 +4,13 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from ...models import Transaction
+from ...models import Account, Transaction
 from ..categorization.cascade import classify, load_rules
 from ..categorization.normalize import normalize_description
 from ..fx import to_base
@@ -70,19 +71,41 @@ def commit_import(
     for this account in the imported date range, so the statement supersedes the
     provisional email rows it covers (auth amounts, missing fees, etc.).
     """
+    account = db.get(Account, account_id)
+
     # Statement imports win over provisional email rows they cover. Archive (not
     # delete) so the rows stay restorable; archived rows are already excluded
     # from the dashboard and net-worth.
     if source == "statement" and previews:
         dates = [p.parsed.date for p in previews]
+        min_date, max_date = min(dates), max(dates)
+
+        # Fetch email rows before bulk-archiving so we can reverse the balance
+        # deltas they previously applied to account.current_balance.
+        if account is not None:
+            email_rows = db.execute(
+                select(Transaction).where(
+                    Transaction.account_id == account_id,
+                    Transaction.source == "email",
+                    Transaction.archived.is_(False),
+                    Transaction.date >= min_date,
+                    Transaction.date <= max_date,
+                    Transaction.currency == account.native_currency,
+                )
+            ).scalars().all()
+            if email_rows:
+                reversal = sum(r.amount for r in email_rows)
+                account.current_balance -= reversal
+                account.balance_updated_at = datetime.now(UTC)
+
         db.execute(
             update(Transaction)
             .where(
                 Transaction.account_id == account_id,
                 Transaction.source == "email",
                 Transaction.archived.is_(False),
-                Transaction.date >= min(dates),
-                Transaction.date <= max(dates),
+                Transaction.date >= min_date,
+                Transaction.date <= max_date,
             )
             .values(archived=True)
         )
@@ -94,6 +117,7 @@ def commit_import(
     # on write-back so repeat merchants in the same import hit the in-memory
     # cache instead of re-querying the rules table per row.
     rules = load_rules(db)
+    email_balance_delta = Decimal("0")
     for prev in previews:
         if prev.is_duplicate and not force:
             skipped += 1
@@ -122,6 +146,18 @@ def commit_import(
                 source=source,
             )
         )
+        # Accumulate native-currency delta for email imports so we can update
+        # account.current_balance without summing all historical transactions.
+        if source == "email" and account is not None and prev.parsed.currency == account.native_currency:
+            email_balance_delta += prev.parsed.amount
         imported += 1
+
+    # Apply the running delta to the account balance for email-sourced imports.
+    # Statement-sourced imports don't auto-adjust — the user sets the balance
+    # manually from the statement's closing figure.
+    if source == "email" and account is not None and email_balance_delta:
+        account.current_balance += email_balance_delta
+        account.balance_updated_at = datetime.now(UTC)
+
     db.commit()
     return ImportResult(imported=imported, duplicates_skipped=skipped, duplicates=duplicates)

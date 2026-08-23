@@ -1,6 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app.models.fx import FxRate
 from app.services.fx import get_rate, to_base, to_base_current
 
@@ -45,6 +47,28 @@ def test_usd_holding_to_clp_two_hop(db, stub_fx):
     value_native = qty * price_usd
     value_base = to_base_current(db, value_native, "USD", provider=provider)
     assert value_base == Decimal("9500000")
+
+
+def test_fallback_rate_is_not_cached_and_provider_can_supersede(db, stub_fx):
+    """A fallback rate (provider unreachable) must not be persisted to fx_rates,
+    so a later successful provider fetch wins for the same (date, base, quote)."""
+    on = date(2025, 4, 1)
+    broken = stub_fx({})  # raises for every pair -> triggers _FALLBACK_RATES
+    r1 = get_rate(db, on, "EUR", "CLP", provider=broken)
+    assert r1 == Decimal("1050")  # the hardcoded approximate fallback
+    assert db.query(FxRate).filter_by(date=on, base_currency="EUR", quote_currency="CLP").count() == 0
+
+    working = stub_fx({(on, "EUR", "CLP"): Decimal("1234")})
+    r2 = get_rate(db, on, "EUR", "CLP", provider=working)
+    assert r2 == Decimal("1234")  # real rate supersedes the earlier fallback
+    cached = db.query(FxRate).filter_by(date=on, base_currency="EUR", quote_currency="CLP").one()
+    assert Decimal(str(cached.rate)) == Decimal("1234")
+
+
+def test_fallback_raises_when_pair_unknown(db, stub_fx):
+    broken = stub_fx({})
+    with pytest.raises(LookupError):
+        get_rate(db, date(2025, 4, 1), "JPY", "CLP", provider=broken)
 
 
 def test_usd_holding_via_eur_pricing_does_not_pre_convert(db, stub_fx):

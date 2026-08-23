@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import csv
+import io
 import uuid
+from datetime import UTC, datetime
 from datetime import date as date_type
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -20,18 +24,33 @@ from ..services.fx.conversion import to_base
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-@router.get("")
-def list_transactions(
-    start: date_type | None = Query(None),
-    end: date_type | None = Query(None),
-    account_id: int | None = Query(None),
-    category: str | None = Query(None),
-    txn_type: TxnType | None = Query(None),
-    search: str | None = Query(None, description="Case-insensitive substring match on raw or normalized description"),
-    include_archived: bool = Query(False),
-    limit: int = Query(500, ge=1, le=5000),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_session),
+def _adjust_email_balance(db: Session, txn: Transaction, delta: Decimal) -> None:
+    """Mirror an email-sourced row's contribution to account.current_balance.
+
+    Email imports add each row's native amount to the balance (see
+    commit_import); archiving / deleting / re-amounting such a row must apply
+    the matching delta or the balance drifts. Statement rows never touch the
+    balance — the user maintains it manually from the statement's closing
+    figure — and neither do email rows in a non-native currency (the import
+    skipped those too).
+    """
+    if txn.source != "email" or not delta:
+        return
+    account = db.get(Account, txn.account_id)
+    if account is None or txn.currency != account.native_currency:
+        return
+    account.current_balance += delta
+    account.balance_updated_at = datetime.now(UTC)
+
+
+def _filtered_query(
+    start: date_type | None,
+    end: date_type | None,
+    account_id: int | None,
+    category: str | None,
+    txn_type: TxnType | None,
+    search: str | None,
+    include_archived: bool,
 ):
     q = select(Transaction)
     if start is not None:
@@ -56,10 +75,75 @@ def list_transactions(
         )
     if not include_archived:
         q = q.where(Transaction.archived.is_(False))
+    return q
+
+
+@router.get("")
+def list_transactions(
+    start: date_type | None = Query(None),
+    end: date_type | None = Query(None),
+    account_id: int | None = Query(None),
+    category: str | None = Query(None),
+    txn_type: TxnType | None = Query(None),
+    search: str | None = Query(None, description="Case-insensitive substring match on raw or normalized description"),
+    include_archived: bool = Query(False),
+    limit: int = Query(500, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_session),
+):
+    q = _filtered_query(start, end, account_id, category, txn_type, search, include_archived)
     q = q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit).offset(offset)
 
     rows = db.execute(q).scalars().all()
     return [_serialize(t) for t in rows]
+
+
+@router.get("/export.csv")
+def export_transactions_csv(
+    start: date_type | None = Query(None),
+    end: date_type | None = Query(None),
+    account_id: int | None = Query(None),
+    category: str | None = Query(None),
+    txn_type: TxnType | None = Query(None),
+    search: str | None = Query(None),
+    include_archived: bool = Query(False),
+    db: Session = Depends(get_session),
+):
+    """Export the same filtered set the transactions list shows, as CSV.
+    No limit/offset — exports honor filters but always return the full match.
+    """
+    q = _filtered_query(start, end, account_id, category, txn_type, search, include_archived)
+    q = q.order_by(Transaction.date.desc(), Transaction.id.desc())
+    rows = db.execute(q).scalars().all()
+
+    accounts = {a.id: a for a in db.execute(select(Account)).scalars().all()}
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "date", "account", "amount", "currency", "amount_in_base_clp",
+        "category", "txn_type", "description", "archived",
+    ])
+    for t in rows:
+        account = accounts.get(t.account_id)
+        writer.writerow([
+            t.date.isoformat(),
+            account.name if account else t.account_id,
+            str(t.amount),
+            t.currency,
+            str(Decimal(str(t.amount)) * Decimal(str(t.fx_rate_to_base))),
+            t.category or "",
+            t.txn_type.value,
+            t.normalized_description or t.raw_description,
+            "yes" if t.archived else "no",
+        ])
+
+    filename = f"transactions_{datetime.now(UTC).strftime('%Y%m%d')}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _serialize(t: Transaction) -> dict:
@@ -138,6 +222,8 @@ def delete_transaction(txn_id: int, db: Session = Depends(get_session)):
     t = db.get(Transaction, txn_id)
     if t is None:
         raise HTTPException(404, "transaction not found")
+    if not t.archived:
+        _adjust_email_balance(db, t, -t.amount)
     db.delete(t)
     db.commit()
 
@@ -150,7 +236,9 @@ def archive_transaction(txn_id: int, db: Session = Depends(get_session)):
     t = db.get(Transaction, txn_id)
     if t is None:
         raise HTTPException(404, "transaction not found")
-    t.archived = True
+    if not t.archived:
+        t.archived = True
+        _adjust_email_balance(db, t, -t.amount)
     db.commit()
     return {"id": t.id, "archived": True}
 
@@ -160,7 +248,9 @@ def unarchive_transaction(txn_id: int, db: Session = Depends(get_session)):
     t = db.get(Transaction, txn_id)
     if t is None:
         raise HTTPException(404, "transaction not found")
-    t.archived = False
+    if t.archived:
+        t.archived = False
+        _adjust_email_balance(db, t, t.amount)
     db.commit()
     return {"id": t.id, "archived": False}
 
@@ -204,6 +294,8 @@ def update_amount(txn_id: int, payload: AmountUpdate, db: Session = Depends(get_
     txn = db.get(Transaction, txn_id)
     if txn is None:
         raise HTTPException(404, "transaction not found")
+    if not txn.archived:
+        _adjust_email_balance(db, txn, payload.amount - txn.amount)
     txn.amount = payload.amount
     db.commit()
     db.refresh(txn)
@@ -211,6 +303,30 @@ def update_amount(txn_id: int, payload: AmountUpdate, db: Session = Depends(get_
         "id": txn.id,
         "amount": str(txn.amount),
         "amount_in_base": str(Decimal(str(txn.amount)) * Decimal(str(txn.fx_rate_to_base))),
+    }
+
+
+class DescriptionUpdate(BaseModel):
+    raw_description: str
+
+
+@router.patch("/{txn_id}/description")
+def update_description(txn_id: int, payload: DescriptionUpdate, db: Session = Depends(get_session)):
+    """Edit the raw description of a transaction. Re-normalizes so the display
+    name and categorization key both reflect the new wording. Category is left
+    untouched — the user can update it separately if needed.
+    """
+    txn = db.get(Transaction, txn_id)
+    if txn is None:
+        raise HTTPException(404, "transaction not found")
+    txn.raw_description = payload.raw_description
+    txn.normalized_description = normalize_description(payload.raw_description)
+    db.commit()
+    db.refresh(txn)
+    return {
+        "id": txn.id,
+        "raw_description": txn.raw_description,
+        "normalized_description": txn.normalized_description,
     }
 
 

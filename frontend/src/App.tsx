@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
-import { Dashboard } from './pages/Dashboard'
-import { Portfolio } from './pages/Portfolio'
-import { Forecast } from './pages/Forecast'
-import { Transactions } from './pages/Transactions'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Login } from './pages/Login'
+import { PageLoading } from './components/PageLoading'
+
+// Route-level code splitting: each tab is its own chunk, fetched on first
+// visit. Recharts lands in a shared chunk pulled in with the first page that
+// needs it (Dashboard, the default tab) instead of one monolithic bundle.
+const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })))
+const Portfolio = lazy(() => import('./pages/Portfolio').then((m) => ({ default: m.Portfolio })))
+const Forecast = lazy(() => import('./pages/Forecast').then((m) => ({ default: m.Forecast })))
+const Transactions = lazy(() => import('./pages/Transactions').then((m) => ({ default: m.Transactions })))
 import { CurrencyProvider, useCurrency } from './lib/currency'
 import { useSpendingSummary } from './api/hooks'
 import { clearToken, getToken, registerUnauthorizedHandler } from './lib/auth'
@@ -231,10 +236,12 @@ export function App() {
           <SummaryBar />
           <div className="content">
             <Header tab={tab} />
-            {tab === 'dashboard' && <Dashboard />}
-            {tab === 'portfolio' && <Portfolio />}
-            {tab === 'forecast' && <Forecast />}
-            {tab === 'transactions' && <Transactions />}
+            <Suspense fallback={<PageLoading />}>
+              {tab === 'dashboard' && <Dashboard />}
+              {tab === 'portfolio' && <Portfolio />}
+              {tab === 'forecast' && <Forecast />}
+              {tab === 'transactions' && <Transactions />}
+            </Suspense>
           </div>
         </main>
       </div>

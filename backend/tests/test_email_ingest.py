@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.auth import get_current_user
 from app.config import get_settings
 from app.db import Base, get_session
 from app.main import create_app
@@ -132,6 +133,80 @@ def test_statement_supersedes_email_rows(db, monkeypatch):
     assert email_row.archived is True
 
 
+# --- Balance mirroring: archive/delete/amount-edit of email rows ----------
+
+def _email_row_with_balance(db, monkeypatch) -> tuple[Account, Transaction]:
+    """Import one -110.30 EUR email row; balance goes 0 -> -110.30."""
+    import app.services.importers.service as svc
+
+    seed(db)
+    monkeypatch.setattr(svc, "to_base", lambda *a, **k: Decimal("1"))
+    monkeypatch.setattr(svc, "classify", _stub_classify)
+    acct = _account(db)
+    prev = preview_import(db, acct.id, [_parsed(date(2026, 5, 15), "-110.30", "Trainline")])
+    commit_import(db, acct.id, prev, source="email")
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("-110.30")
+    row = db.execute(select(Transaction).where(Transaction.source == "email")).scalar_one()
+    return acct, row
+
+
+def test_archive_email_row_reverses_balance(db, monkeypatch):
+    from app.routers.transactions import archive_transaction, unarchive_transaction
+
+    acct, row = _email_row_with_balance(db, monkeypatch)
+
+    archive_transaction(row.id, db)
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("0")
+
+    # Idempotent: archiving again must not double-reverse.
+    archive_transaction(row.id, db)
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("0")
+
+    unarchive_transaction(row.id, db)
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("-110.30")
+
+
+def test_delete_email_row_reverses_balance(db, monkeypatch):
+    from app.routers.transactions import delete_transaction
+
+    acct, row = _email_row_with_balance(db, monkeypatch)
+    delete_transaction(row.id, db)
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("0")
+
+
+def test_amount_edit_email_row_applies_delta(db, monkeypatch):
+    from app.routers.transactions import AmountUpdate, update_amount
+
+    acct, row = _email_row_with_balance(db, monkeypatch)
+    update_amount(row.id, AmountUpdate(amount=Decimal("-100.30")), db)
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("-100.30")
+
+
+def test_statement_row_edits_leave_balance_alone(db, monkeypatch):
+    import app.services.importers.service as svc
+    from app.routers.transactions import archive_transaction
+
+    seed(db)
+    monkeypatch.setattr(svc, "to_base", lambda *a, **k: Decimal("1"))
+    monkeypatch.setattr(svc, "classify", _stub_classify)
+    acct = _account(db)
+    prev = preview_import(db, acct.id, [_parsed(date(2026, 5, 10), "-5.00", "Cafe")])
+    commit_import(db, acct.id, prev)  # source="statement" — no balance effect
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("0")
+
+    row = db.execute(select(Transaction)).scalars().first()
+    archive_transaction(row.id, db)
+    db.refresh(acct)
+    assert acct.current_balance == Decimal("0")
+
+
 # --- Endpoint ------------------------------------------------------------
 
 def _make_client(monkeypatch, *, with_account: bool, creds: bool) -> TestClient:
@@ -170,6 +245,8 @@ def _make_client(monkeypatch, *, with_account: bool, creds: bool) -> TestClient:
 
     app = create_app()
     app.dependency_overrides[get_session] = _override
+    # Fresh app instance — the conftest auth override targets app.main.app only.
+    app.dependency_overrides[get_current_user] = lambda: "test"
     return TestClient(app)
 
 

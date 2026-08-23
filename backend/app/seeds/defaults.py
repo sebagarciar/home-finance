@@ -32,6 +32,9 @@ DEFAULT_CATEGORIES = [
     "Other",
 ]
 
+# Seeded categories whose inflows count as income (excluded from spending).
+DEFAULT_INCOME_CATEGORIES = {"Salary"}
+
 # normalized_description (lowercased substring after normalization) -> category.
 # Seeded rules; the learned map grows on top of these via use + manual corrections.
 SEED_RULES: dict[str, str] = {
@@ -177,10 +180,18 @@ def _seed_manual_account(db: Session) -> None:
 
 
 def _seed_categories(db: Session) -> None:
-    existing = set(db.execute(select(Category.name)).scalars().all())
+    rows = db.execute(select(Category)).scalars().all()
+    existing = {c.name for c in rows}
     for name in DEFAULT_CATEGORIES:
         if name not in existing:
-            db.add(Category(name=name, is_system=True))
+            db.add(Category(name=name, is_system=True, is_income=name in DEFAULT_INCOME_CATEGORIES))
+    # Repair: a taxonomy with no income category breaks the income/spending
+    # split, so re-flag the seeded defaults (e.g. a DB created before the
+    # is_income column existed, where every row defaulted to false).
+    if rows and not any(c.is_income for c in rows):
+        for c in rows:
+            if c.name in DEFAULT_INCOME_CATEGORIES:
+                c.is_income = True
 
 
 def _seed_rules(db: Session) -> None:

@@ -12,13 +12,19 @@ class Settings(BaseSettings):
     # Reporting currency. Hardcoded for Phase 1 — do not expose to UI.
     base_currency: str = "CLP"
 
-    # FX
-    # NOTE: exchangerate.host changed to require an API key in late 2024. Set
-    # FX_API_KEY to use it, or swap to a different provider by implementing
-    # FxProvider and updating fx_provider. See README.
-    fx_provider: str = "exchangerate_host"
+    # FX — provider options, all behind FxProvider:
+    # "free" (default) = CurrencyApiProvider: fawazahmed0/currency-api via CDN.
+    #   No key, fast, daily snapshots incl. weekends, covers CLP.
+    # "mindicador" = FreeCompositeFxProvider: mindicador.cl (official BCCh
+    #   fixings) for anything<->CLP + frankfurter.app (ECB) for the rest. No
+    #   key, but mindicador.cl is slow and flaky (measured 13 s+ responses and
+    #   intermittent 500s/rate-limiting).
+    # "exchangerate_host" requires a paid FX_API_KEY since late 2024.
+    fx_provider: str = "free"
     fx_api_base: str = "https://api.exchangerate.host"
     fx_api_key: str | None = None
+    frankfurter_api_base: str = "https://api.frankfurter.app"
+    mindicador_api_base: str = "https://mindicador.cl/api"
 
     # Prices (holdings valuation). yfinance is free and requires no key.
     price_provider: str = "yfinance"

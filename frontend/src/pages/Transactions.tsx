@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type Account, type Category, type Transaction, type TxnType } from '../api/client'
 import { useCurrency } from '../lib/currency'
 import { useTransactions, useCategories, useAccounts } from '../api/hooks'
 import { categoryStyle, categoryColorHex } from '../design/categories'
-import { Import } from './Import'
+import { PageLoading } from '../components/PageLoading'
+
+// Import flow is its own chunk — only fetched when the sub-tab is opened.
+const Import = lazy(() => import('./Import').then((m) => ({ default: m.Import })))
 
 type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
 type View = 'transactions' | 'import'
@@ -24,7 +27,13 @@ export function Transactions() {
           </button>
         ))}
       </div>
-      {view === 'transactions' ? <TransactionsView /> : <Import />}
+      {view === 'transactions' ? (
+        <TransactionsView />
+      ) : (
+        <Suspense fallback={<PageLoading />}>
+          <Import />
+        </Suspense>
+      )}
     </>
   )
 }
@@ -60,7 +69,29 @@ function TransactionsView() {
   const categories = useCategories().data ?? []
   const accounts = useAccounts().data ?? []
   const loading = txnsQ.isLoading
+  const [exporting, setExporting] = useState(false)
   const reload = () => qc.invalidateQueries({ queryKey: ['transactions'] })
+
+  async function exportCsv() {
+    setExporting(true)
+    try {
+      const { blob, filename } = await api.transactions.exportCsv({
+        search: debouncedSearch || undefined,
+        category: category || undefined,
+        start: dateFrom || undefined,
+        end: dateTo || undefined,
+        include_archived: showArchived || undefined,
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const sorted = useMemo(() => {
     const arr = [...txns]
@@ -146,6 +177,9 @@ function TransactionsView() {
             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
               {loading ? 'Loading…' : `${txns.length} transactions`}
             </span>
+            <button className="btn" onClick={exportCsv} disabled={exporting || loading}>
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
             <button className="btn primary" onClick={() => setCreating(true)}>
               + Add
             </button>
@@ -334,6 +368,7 @@ function EditTxnModal({
   const account = accounts.find((a) => a.id === txn.account_id)
   const [date, setDate] = useState(txn.date)
   const [amount, setAmount] = useState(txn.amount)
+  const [description, setDescription] = useState(txn.raw_description)
   const [category, setCategory] = useState(txn.category ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -345,6 +380,7 @@ function EditTxnModal({
       const tasks: Promise<unknown>[] = []
       if (date !== txn.date) tasks.push(api.transactions.setDate(txn.id, date))
       if (amount !== txn.amount) tasks.push(api.transactions.setAmount(txn.id, amount))
+      if (description !== txn.raw_description) tasks.push(api.transactions.setDescription(txn.id, description))
       if (category && category !== (txn.category ?? '')) {
         tasks.push(api.transactions.setCategory(txn.id, category, true))
       }
@@ -385,29 +421,21 @@ function EditTxnModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>Edit transaction</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-            {txn.normalized_description || '—'}
-          </div>
-          {txn.raw_description && txn.raw_description !== txn.normalized_description && (
-            <div
-              style={{
-                fontSize: 12,
-                color: 'var(--text-muted)',
-                wordBreak: 'break-word',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-              }}
-            >
-              {txn.raw_description}
-            </div>
-          )}
-        </div>
         {account && (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
             <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>Source:</span>{' '}
             {account.name}{account.institution ? ` · ${account.institution}` : ''}
           </div>
         )}
+        <label className="modal-field">
+          Description
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Mercadona"
+          />
+        </label>
         <label className="modal-field">
           Date
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

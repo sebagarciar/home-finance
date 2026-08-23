@@ -4,4 +4,9 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    host: true, // bind to 0.0.0.0 so it's reachable on the local network
+    port: Number(process.env.PORT) || 5173, // PORT lets tooling (e.g. preview) assign a free port
+    allowedHosts: ["macbook-air-de-seba.local"],
+  },
 })

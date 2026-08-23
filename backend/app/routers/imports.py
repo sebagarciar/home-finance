@@ -10,6 +10,7 @@ from ..config import get_settings
 from ..db import get_session
 from ..services.email_ingest import archive_santander_emails, fetch_santander_emails
 from ..services.importers import get_parser
+from ..services.importers.base import ParsedTxn
 from ..services.importers.santander_es_email import parse_santander_email
 from ..services.importers.service import commit_import, preview_import
 
@@ -103,13 +104,13 @@ def email_sync(
         raise HTTPException(400, "No account_id given and SANTANDER_EMAIL_ACCOUNT_ID is unset")
 
     uid_raw_pairs = fetch_santander_emails(since=since, limit=limit)
-    parsed_pairs: list[tuple[str, object]] = [
+    parsed_pairs: list[tuple[str, ParsedTxn]] = [
         (uid, p)
         for uid, raw in uid_raw_pairs
         if (p := parse_santander_email(raw)) is not None
     ]
     parsed_uids = [uid for uid, _ in parsed_pairs]
-    parsed_txns = [p for _, p in parsed_pairs]  # type: ignore[misc]
+    parsed_txns = [p for _, p in parsed_pairs]
     previews = preview_import(db, target_account, parsed_txns)
     result = commit_import(db, target_account, previews, source="email")
     # Archive only emails that were parseable; leave unrecognised ones in INBOX.

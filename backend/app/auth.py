@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -13,7 +13,7 @@ _ALGORITHM = "HS256"
 
 
 def create_token(username: str, settings: Settings) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.token_expire_days)
+    expire = datetime.now(UTC) + timedelta(days=settings.token_expire_days)
     return jwt.encode({"sub": username, "exp": expire}, settings.secret_key, algorithm=_ALGORITHM)
 
 
@@ -38,5 +38,5 @@ def get_current_user(
         if username is None:
             raise exc
     except JWTError:
-        raise exc
+        raise exc from None
     return username

@@ -28,6 +28,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await r.json()) as T;
 }
 
+// Downloads honor the same bearer auth as request(), so a plain <a href> won't
+// work — fetch the blob here and hand the caller a filename + object URL to click.
+async function requestBlob(path: string): Promise<{ blob: Blob; filename: string }> {
+  const token = getToken();
+  const r = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (r.status === 401) {
+    clearToken();
+    triggerUnauthorized();
+    throw new Error("Session expired — please log in again");
+  }
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    throw new Error(`API ${r.status}: ${body || r.statusText}`);
+  }
+  const disposition = r.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  return { blob: await r.blob(), filename: match?.[1] ?? "export.csv" };
+}
+
 export type AccountType = "checking" | "credit" | "savings" | "investment" | "debt";
 export type TxnType =
   | "card_payment"
@@ -244,6 +265,184 @@ export interface FintualFund {
   currency: string;
 }
 
+// ---- Portfolio Health Review ----
+export interface InvestorProfile {
+  id: number;
+  primary_goal: string;
+  time_horizon: string;
+  risk_tolerance: string;
+  risk_capacity: string;
+  loss_reaction: string;
+  monthly_income: string;
+  monthly_income_currency: string;
+  monthly_expenses: string;
+  monthly_expenses_currency: string;
+  emergency_fund_amount: string;
+  emergency_fund_currency: string;
+  expected_large_expenses: { label: string; amount: number; currency: string; months_away: number }[];
+  income_stability: string;
+  investment_knowledge: string;
+  tax_residence: string;
+  base_currency: string;
+  constraints: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface InvestmentPolicyProfile {
+  id: number;
+  investor_profile_id: number;
+  risk_profile: "conservative" | "moderate" | "growth" | "aggressive";
+  target_allocation: Record<string, number>;
+  allocation_ranges: Record<string, [number, number]>;
+  max_single_holding_pct: number;
+  max_sector_pct: number;
+  max_country_pct: number;
+  max_currency_pct: number;
+  max_crypto_pct: number;
+  max_employer_stock_pct: number;
+  emergency_fund_target_months: number;
+  rebalance_threshold_pct: number;
+  version: number;
+}
+
+export interface PortfolioFinding {
+  id?: number;
+  category: string;
+  severity: "low" | "medium" | "high";
+  finding: string;
+  evidence: Record<string, unknown>;
+  whyItMatters: string;
+  educationalGuidance: string;
+  prohibitedSpecificAdvice: boolean;
+}
+
+export interface StressScenario {
+  scenario: string;
+  label: string;
+  assumption: string;
+  approx_impact_pct: number;
+  approx_impact_base: string;
+}
+
+export interface LiquidityDiagnostics {
+  cash_clp: string;
+  monthly_expenses_clp: string;
+  emergency_fund_declared_clp: string;
+  ef_months_current: number | null;
+  ef_months_target: number;
+  near_term_large_expenses_clp: string;
+  cash_gap_clp: string;
+  data_available: boolean;
+}
+
+export interface SecurityMetadata {
+  ticker: string;
+  asset_class: string | null;
+  sector: string | null;
+  region: string | null;
+  country: string | null;
+  currency: string | null;
+  product_type: string | null;
+  expense_ratio: number | null;
+  diversified_fund: boolean | null;
+  liquidity_level: string | null;
+  source: "auto" | "manual";
+  updated_at: string | null;
+}
+
+export type SecurityMetadataInput = Partial<Omit<SecurityMetadata, "ticker" | "source" | "updated_at">>;
+
+export interface PortfolioDiagnostics {
+  allocation: {
+    portfolio_value_in_base: string;
+    current_pct: Record<string, number>;
+    current_value_in_base: Record<string, string>;
+    target_ranges: Record<string, [number, number]>;
+    out_of_range: { bucket: string; current_pct: number; range: [number, number]; direction: "above" | "below" }[];
+  };
+  concentration: {
+    top1_pct: number;
+    top3_pct: number;
+    top5_pct: number;
+    largest_holding: { ticker: string; pct: number; value_in_base: string; bucket: string } | null;
+    largest_single_stock: { ticker: string; pct: number } | null;
+    crypto_pct: number;
+    employer_stock_ticker: string | null;
+    employer_stock_pct: number;
+    holdings: { ticker: string; pct: number; value_in_base: string; bucket: string; is_single_stock: boolean }[];
+  };
+  liquidity: LiquidityDiagnostics;
+  stress: StressScenario[];
+  risk: Record<string, number>;
+  sector: { by_sector_pct: Record<string, number>; max_sector_pct: number } | null;
+  geography: { by_country_pct: Record<string, number>; max_country_pct: number } | null;
+  currency_exposure: { by_currency_pct: Record<string, number>; max_currency_pct: number } | null;
+  fees: {
+    weighted_expense_ratio: number | null;
+    fee_coverage_pct: number | null;
+    holdings_with_fee_data: number;
+    holdings_missing_fee_data: number;
+    fee_warn_threshold: number;
+    fee_high_threshold: number;
+  } | null;
+  data_quality: { unknown_count: number; missing_price_count: number; unknown_value_fraction: number; holdings_total: number };
+  status: string;
+  weights: Record<string, number>;
+  score_explanation: Record<string, { finding_id: string; severity?: string; penalty?: number; cap?: number }[]>;
+  policy: InvestmentPolicyProfile;
+  flags: Record<string, boolean>;
+}
+
+export interface PortfolioReview {
+  id: number;
+  created_at: string | null;
+  overall_score: number;
+  sub_scores: Record<string, number>;
+  diagnostics: PortfolioDiagnostics;
+  missing_data: string[];
+  ai_explanation: Record<string, unknown> | null;
+  rules_engine_version: string;
+  ai_prompt_version: string | null;
+  investor_profile_id: number;
+  investment_policy_profile_id: number;
+  findings: PortfolioFinding[];
+  profile_incomplete: false;
+}
+
+export interface FactualSummary {
+  profile_incomplete: true;
+  factual_summary: {
+    portfolio_value_in_base: string;
+    allocation_pct: Record<string, number>;
+    bucket_labels: Record<string, string>;
+    top_holdings: { ticker: string; pct: number; value_in_base: string; bucket: string }[];
+    by_currency: NetworthCurrencyRow[];
+  };
+}
+
+export type ReviewResponse = PortfolioReview | FactualSummary;
+
+export interface ProfileInput {
+  primary_goal: string;
+  time_horizon: string;
+  risk_tolerance: string;
+  risk_capacity: string;
+  loss_reaction: string;
+  monthly_income: string;
+  monthly_income_currency: string;
+  monthly_expenses: string;
+  monthly_expenses_currency: string;
+  emergency_fund_amount: string;
+  emergency_fund_currency?: string;
+  expected_large_expenses?: { label: string; amount: number; currency: string; months_away: number }[];
+  income_stability: string;
+  investment_knowledge: string;
+  tax_residence: string;
+  base_currency: string;
+  constraints: Record<string, unknown>;
+}
+
 function qs(params: Record<string, string | number | boolean | undefined | null>): string {
   const u = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -299,6 +498,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(payload),
       }),
+    setDescription: (id: number, raw_description: string) =>
+      request<{ id: number; raw_description: string; normalized_description: string }>(
+        `/transactions/${id}/description`,
+        { method: "PATCH", body: JSON.stringify({ raw_description }) },
+      ),
     setDate: (id: number, date: string) =>
       request<{ id: number; date: string; fx_rate_to_base: string; amount_in_base: string }>(
         `/transactions/${id}/date`,
@@ -319,6 +523,15 @@ export const api = {
     unarchive: (id: number) =>
       request<{ id: number; archived: boolean }>(`/transactions/${id}/unarchive`, { method: "POST" }),
     remove: (id: number) => request<void>(`/transactions/${id}`, { method: "DELETE" }),
+    exportCsv: (params: {
+      start?: string;
+      end?: string;
+      account_id?: number;
+      category?: string;
+      txn_type?: TxnType;
+      search?: string;
+      include_archived?: boolean;
+    }) => requestBlob(`/transactions/export.csv${qs(params)}`),
   },
 
   holdings: {
@@ -363,6 +576,10 @@ export const api = {
       end?: string;
       account_id?: number;
     }) => request<SpendingSummary>(`/spending/summary${qs(params)}`),
+    pace: (through_day: number, trailing_months = 6) =>
+      request<{ currency: "CLP"; expected_by_day: string | null; months_sampled: number }>(
+        `/spending/pace${qs({ through_day, trailing_months })}`,
+      ),
   },
 
   forecast: {
@@ -382,6 +599,33 @@ export const api = {
   prices: {
     fintualSearch: (q: string) =>
       request<{ results: FintualFund[] }>(`/prices/fintual/search${qs({ q })}`),
+  },
+
+  portfolioHealth: {
+    getProfile: () => request<{ profile: InvestorProfile | null }>("/portfolio-health/profile"),
+    putProfile: (body: ProfileInput) =>
+      request<{ profile: InvestorProfile; policy: InvestmentPolicyProfile }>(
+        "/portfolio-health/profile",
+        { method: "PUT", body: JSON.stringify(body) },
+      ),
+    getPolicy: () => request<{ policy: InvestmentPolicyProfile | null }>("/portfolio-health/policy"),
+    runReview: () =>
+      request<ReviewResponse>("/portfolio-health/review", { method: "POST" }),
+    latestReview: () => request<{ review: PortfolioReview | null }>("/portfolio-health/review/latest"),
+    reviews: () =>
+      request<{ id: number; created_at: string | null; overall_score: number; status: string | null;
+        rules_engine_version: string; ai_prompt_version: string | null }[]>("/portfolio-health/reviews"),
+    listMetadata: () => request<SecurityMetadata[]>("/portfolio-health/metadata"),
+    getMetadata: (ticker: string) => request<SecurityMetadata>(`/portfolio-health/metadata/${ticker}`),
+    putMetadata: (ticker: string, body: SecurityMetadataInput) =>
+      request<SecurityMetadata>(`/portfolio-health/metadata/${ticker}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    deleteMetadata: (ticker: string) =>
+      request<{ deleted: string }>(`/portfolio-health/metadata/${ticker}`, { method: "DELETE" }),
+    triggerEnrich: () =>
+      request<SecurityMetadata[]>("/portfolio-health/enrich", { method: "POST" }),
   },
 
   import: {

@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -198,6 +198,40 @@ def test_spending_summary_excludes_salary_and_feeds_income_series(client):
     income = {m["month"]: Decimal(m["total"]) for m in s["by_month_income"]}
     # native amount * fx_rate = 2000 * 1000 = 2,000,000
     assert income["2026-04"] == Decimal("2000000")
+
+
+def test_income_split_follows_is_income_flag_not_name(client):
+    """The income/spending split is driven by Category.is_income, not the
+    hardcoded name "Salary" — flagging another category moves its inflows to
+    the income series."""
+    acc_id = _seed_transactions(client)
+    from app.main import app as _app
+    from app.models import Category
+    db_override = _app.dependency_overrides[get_session]
+    gen = db_override()
+    db = next(gen)
+    try:
+        cat = db.execute(select(Category).where(Category.name == "Other")).scalar_one()
+        cat.is_income = True
+        db.add(
+            Transaction(
+                account_id=acc_id, date=date(2026, 4, 2),
+                amount=Decimal("500.00"), currency="EUR",
+                fx_rate_to_base=Decimal("1000"),
+                txn_type=TxnType.deposit, category="Other",
+                raw_description="Scholarship", normalized_description="scholarship",
+                dedup_hash="h_scholarship",
+            )
+        )
+        db.commit()
+    finally:
+        gen.close()
+
+    s = client.get("/spending/summary", params={"start": "2026-04-01"}).json()
+    by_cat = {c["category"] for c in s["by_category"]}
+    assert "Other" not in by_cat
+    income = {m["month"]: Decimal(m["total"]) for m in s["by_month_income"]}
+    assert income["2026-04"] == Decimal("500000")
 
 
 def test_spending_summary_nets_same_category_inflows(client):
