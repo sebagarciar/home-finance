@@ -116,6 +116,8 @@ export interface Holding {
   source: "yfinance" | "fintual" | "cache" | "manual";
   is_manual: boolean;
   missing_price: boolean;
+  /** Why the live price lookup failed (set when falling back to manual / no price). */
+  price_error: string | null;
   value_native: string;
   value_in_base: string;
 }
@@ -154,6 +156,8 @@ export interface NetworthHoldingRow {
   source: string;
   is_manual: boolean;
   missing_price: boolean;
+  /** Why the live price lookup failed (set when falling back to manual / no price). */
+  price_error: string | null;
   value_in_base: string;
 }
 

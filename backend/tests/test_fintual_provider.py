@@ -22,18 +22,40 @@ from app.services.prices.provider import (
     PriceQuote,
 )
 
-# A days payload deliberately NOT sorted newest-first, to prove we pick max date.
-_DAYS = {
-    "data": [
-        {"attributes": {"date": "2026-05-20", "net_asset_value": 3900.0, "net_asset_value_type": "clp"}},
-        {"attributes": {"date": "2026-05-28", "net_asset_value": 3971.9244, "net_asset_value_type": "clp"}},
-        {"attributes": {"date": "2026-05-27", "net_asset_value": 3960.0, "net_asset_value_type": "clp"}},
-    ]
-}
+# Share-price payload deliberately NOT sorted newest-first, to prove we pick max date.
+_DAYS = [
+    {"id": 1, "managed_fund_serie": 6, "date": "2026-09-29", "value": 4375.9249},
+    {"id": 3, "managed_fund_serie": 6, "date": "2026-10-01", "value": 4450.2229},
+    {"id": 2, "managed_fund_serie": 6, "date": "2026-09-30", "value": 4389.1716},
+]
+_COUNTRIES = [
+    {"id": 1, "name": "chile", "currency": {"id": 1, "name": "CLP"}, "iso_code": "CL"},
+    {"id": 91, "name": "mexico", "currency": {"id": 58, "name": "MXN"}, "iso_code": "MX"},
+]
+_SERIES = [
+    {"id": 6, "managed_fund": {"id": 4, "name": "risky norris", "country": 1}, "name": "a"},
+    {"id": 7, "managed_fund": {"id": 4, "name": "risky norris", "country": 1}, "name": "apv"},
+    {"id": 4, "managed_fund": {"id": 3, "name": "moderate pitt", "country": 1}, "name": "a"},
+    {"id": 11, "managed_fund": {"id": 6, "name": "risky hayek", "country": 91}, "name": "f10"},
+]
 
 
 def _client(handler) -> httpx.Client:
-    return httpx.Client(transport=httpx.MockTransport(handler), base_url="https://fintual.cl/api")
+    return httpx.Client(transport=httpx.MockTransport(handler), base_url="https://inversiones.fintual.com/api")
+
+
+def _api(days=_DAYS):
+    """Handler serving the public endpoints; `days` is the share_price payload."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        p = request.url.path
+        if p == "/api/managed_funds/serie/share_price":
+            return httpx.Response(200, json=days)
+        if p == "/api/managed_funds/serie":
+            return httpx.Response(200, json=_SERIES)
+        if p == "/api/geo/countries":
+            return httpx.Response(200, json=_COUNTRIES)
+        return httpx.Response(404)
+    return handler
 
 
 def test_is_fintual_ticker():
@@ -43,26 +65,36 @@ def test_is_fintual_ticker():
 
 
 def test_fintual_fetch_picks_latest_nav():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/real_assets/186/days"
-        return httpx.Response(200, json=_DAYS)
+    seen: dict = {}
+    inner = _api()
 
-    prov = FintualPriceProvider(base_url="https://fintual.cl/api", client=_client(handler))
-    q = prov.fetch("FINTUAL:186")
-    assert q.price == Decimal("3971.9244")
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/share_price"):
+            seen["params"] = dict(request.url.params)
+        return inner(request)
+
+    q = FintualPriceProvider(client=_client(handler)).fetch("FINTUAL:6")
+    assert seen["params"]["fund_serie"] == "6"
+    assert q.price == Decimal("4450.2229")
     assert q.currency == "CLP"
-    assert q.as_of == date(2026, 5, 28)
-    assert q.ticker == "FINTUAL:186"
+    assert q.as_of == date(2026, 10, 1)
+    assert q.ticker == "FINTUAL:6"
+
+
+def test_fintual_fetch_currency_follows_fund_country():
+    q = FintualPriceProvider(client=_client(_api())).fetch("FINTUAL:11")
+    assert q.currency == "MXN"
 
 
 def test_fintual_fetch_empty_raises():
-    prov = FintualPriceProvider(client=_client(lambda r: httpx.Response(200, json={"data": []})))
+    prov = FintualPriceProvider(client=_client(_api(days=[])))
     with pytest.raises(PriceLookupError):
         prov.fetch("FINTUAL:999")
 
 
 def test_fintual_fetch_http_error_raises():
-    prov = FintualPriceProvider(client=_client(lambda r: httpx.Response(404, text="nope")))
+    # Unknown series -> the API answers 422.
+    prov = FintualPriceProvider(client=_client(lambda r: httpx.Response(422, json={"detail": []})))
     with pytest.raises(PriceLookupError):
         prov.fetch("FINTUAL:186")
 
@@ -78,27 +110,18 @@ def test_composite_routes_by_prefix():
 
     comp = CompositePriceProvider(default=StubDefault(), fintual=StubFintual())
     assert comp.fetch("SPY").currency == "USD"          # -> default (yfinance)
-    assert comp.fetch("FINTUAL:186").currency == "CLP"  # -> fintual
+    assert comp.fetch("FINTUAL:6").currency == "CLP"  # -> fintual
 
 
 def test_search_resolves_name_to_series_tickers():
-    def handler(request: httpx.Request) -> httpx.Response:
-        p = request.url.path
-        if p == "/api/conceptual_assets":
-            assert request.url.params.get("name") == "Risky Norris"
-            return httpx.Response(200, json={
-                "data": [{"id": "36", "attributes": {"name": "Risky Norris", "currency": "CLP"}}]
-            })
-        if p == "/api/conceptual_assets/36/real_assets":
-            return httpx.Response(200, json={"data": [
-                {"id": "186", "attributes": {"serie": "A", "symbol": "FM-FIN-RCN-A"}},
-                {"id": "245", "attributes": {"serie": "APV", "symbol": "FM-FIN-RCN-APV"}},
-            ]})
-        return httpx.Response(404)
-
-    rows = search_fintual_funds("Risky Norris", client=_client(handler))
-    assert {r["ticker"] for r in rows} == {"FINTUAL:186", "FINTUAL:245"}
+    rows = search_fintual_funds("Risky Norris", client=_client(_api()))
+    assert {r["ticker"] for r in rows} == {"FINTUAL:6", "FINTUAL:7"}
     a = next(r for r in rows if r["serie"] == "A")
     assert a["fund"] == "Risky Norris"
     assert a["currency"] == "CLP"
-    assert a["ticker"] == "FINTUAL:186"
+    assert a["ticker"] == "FINTUAL:6"
+
+
+def test_search_is_case_insensitive_substring():
+    rows = search_fintual_funds("hayek", client=_client(_api()))
+    assert [(r["ticker"], r["currency"]) for r in rows] == [("FINTUAL:11", "MXN")]

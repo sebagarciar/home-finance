@@ -72,6 +72,7 @@ def current_networth(db: Session) -> dict:
             "source": priced.source,
             "is_manual": priced.is_manual,
             "missing_price": priced.missing,
+            "price_error": priced.price_error,
             "value_in_base": str(value_base),
         })
 

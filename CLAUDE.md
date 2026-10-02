@@ -45,7 +45,7 @@ Open http://localhost:5173. CORS is wired for the Vite dev origin.
   - Anywhere else doing FX math is a bug.
 - **No raw SQL.** Everything through SQLAlchemy ORM so we can swap SQLite → Postgres without query rewrites. Use generic types (not SQLite-specific). Alembic is the source of truth for schema.
 - **All external API keys server-side only.** Frontend talks only to FastAPI.
-- **FX and price providers are behind interfaces** (`FxProvider`, `PriceProvider`). The active price provider is `CompositePriceProvider`, which routes `FINTUAL:<real_asset_id>` tickers to `FintualPriceProvider` (Chilean mutual funds via the free `fintual.cl/api`) and everything else to `YFinancePriceProvider`. Manual-price override always wins.
+- **FX and price providers are behind interfaces** (`FxProvider`, `PriceProvider`). The active price provider is `CompositePriceProvider`, which routes `FINTUAL:<serie_id>` tickers to `FintualPriceProvider` (Chilean mutual funds via the public `inversiones.fintual.com/api` that backs Fintual's fund pages — the old `fintual.cl/api/real_assets` is token-gated since 2026 and uses different ids) and everything else to `YFinancePriceProvider`. Manual-price override always wins.
 
 ## Categorization model
 

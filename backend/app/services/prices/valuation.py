@@ -46,6 +46,9 @@ class PricedHolding:
     # True when no manual price exists and the provider failed — we have no
     # price for this holding.
     missing: bool = False
+    # Why the live lookup failed, when we fell back (e.g. "Fintual request
+    # failed for ...: 422"). None when the price is live.
+    price_error: str | None = None
 
     @property
     def value(self) -> Decimal:
@@ -102,6 +105,7 @@ def price_holding(
     """
     qty = Decimal(str(holding.quantity))
     live_source = "fintual" if holding.ticker.upper().startswith("FINTUAL:") else "yfinance"
+    price_error: str | None = None
     try:
         quote = current_price(db, holding.ticker, provider=provider)
         if quote.currency != holding.price_currency:
@@ -121,6 +125,7 @@ def price_holding(
         )
     except PriceLookupError as e:
         log.info("Live price unavailable for %s (%s); using manual fallback.", holding.ticker, e)
+        price_error = str(e)
 
     if holding.manual_price is not None:
         manual_as_of = (
@@ -137,6 +142,7 @@ def price_holding(
             as_of=manual_as_of,
             source="manual",
             is_manual=True,
+            price_error=price_error,
         )
 
     return PricedHolding(
@@ -149,4 +155,5 @@ def price_holding(
         source="manual",
         is_manual=True,
         missing=True,
+        price_error=price_error,
     )

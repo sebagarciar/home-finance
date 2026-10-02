@@ -129,6 +129,7 @@ def test_manual_price_fallback_when_provider_fails(session_factory, monkeypatch)
     assert priced.source == "manual"
     assert priced.price == Decimal("100")
     assert priced.as_of == date(2026, 5, 1)
+    assert priced.price_error  # failure reason is carried through for the UI
     db.close()
 
 
@@ -152,6 +153,7 @@ def test_missing_price_when_no_manual_and_provider_fails(session_factory, monkey
     assert priced.missing is True
     assert priced.is_manual is True
     assert priced.price == Decimal("0")
+    assert priced.price_error
     db.close()
 
 

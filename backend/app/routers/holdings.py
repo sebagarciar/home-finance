@@ -67,6 +67,7 @@ def _serialize(db: Session, h: Holding) -> dict:
         "source": priced.source,
         "is_manual": priced.is_manual,
         "missing_price": priced.missing,
+        "price_error": priced.price_error,
         "value_native": str(priced.value),
         "value_in_base": str(value_base),
     }

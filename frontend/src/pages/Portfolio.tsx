@@ -321,9 +321,15 @@ function PortfolioOverview() {
                     {mask(fmtNative(h.price, h.price_currency))}
                   </span>
                   {h.is_manual && (
-                    <span className={`tag ${h.missing_price ? 'tag-warn' : 'tag-info'}`}>
+                    <span
+                      className={`tag ${h.missing_price ? 'tag-warn' : 'tag-info'}`}
+                      title={h.price_error ?? undefined}
+                    >
                       {h.missing_price ? 'no price' : `manual · ${shortDate(h.as_of)}`}
                     </span>
+                  )}
+                  {h.price_error && (
+                    <span className="muted" style={{ fontSize: 11 }}>{h.price_error}</span>
                   )}
                 </span>
                 <span className="num num-col">{format(Number(h.value_in_base))}</span>
