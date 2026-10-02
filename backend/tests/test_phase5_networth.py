@@ -349,6 +349,27 @@ def test_holdings_crud(client, session_factory, monkeypatch):
     assert rows[0]["is_manual"] is True
     assert Decimal(rows[0]["price"]) == Decimal("123.45")
 
+    # PATCH edits fields, moves accounts, and explicit null clears manual price.
+    sess = session_factory()
+    sess.add(Account(name="Fintual", country="CL", type=AccountType.investment, native_currency="CLP"))
+    sess.commit()
+    other_id = sess.query(Account).filter_by(name="Fintual").one().id
+    sess.close()
+    r = client.patch(f"/holdings/{holding_id}", json={
+        "quantity": "6", "account_id": other_id, "manual_price": None,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert Decimal(body["quantity"]) == Decimal("6")
+    assert body["account_id"] == other_id
+    assert body["manual_price"] is None and body["manual_price_updated_at"] is None
+    # Omitted manual_price is left untouched.
+    client.put(f"/holdings/{holding_id}/manual_price", json={"manual_price": "10"})
+    r = client.patch(f"/holdings/{holding_id}", json={"asset_class": "bond"})
+    assert r.json()["asset_class"] == "bond"
+    assert Decimal(r.json()["manual_price"]) == Decimal("10")
+    assert client.patch(f"/holdings/{holding_id}", json={"account_id": 9999}).status_code == 404
+
     r = client.delete(f"/holdings/{holding_id}")
     assert r.status_code == 204
     assert client.get("/holdings").json() == []

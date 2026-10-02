@@ -545,11 +545,12 @@ export const api = {
       manual_price?: string | null;
     }) => request<Holding>("/holdings", { method: "POST", body: JSON.stringify(payload) }),
     update: (id: number, payload: Partial<{
+      account_id: number;
       ticker: string;
       quantity: string;
       price_currency: string;
       asset_class: string;
-      manual_price: string;
+      manual_price: string | null; // null clears the manual override
     }>) => request<Holding>(`/holdings/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
     setManualPrice: (id: number, manual_price: string | null) =>
       request<Holding>(`/holdings/${id}/manual_price`, {

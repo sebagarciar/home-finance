@@ -32,11 +32,12 @@ class HoldingIn(BaseModel):
 
 
 class HoldingUpdate(BaseModel):
+    account_id: int | None = None
     ticker: str | None = Field(default=None, min_length=1, max_length=32)
     quantity: Decimal | None = None
     price_currency: str | None = Field(default=None, min_length=3, max_length=3)
     asset_class: str | None = None
-    manual_price: Decimal | None = None
+    manual_price: Decimal | None = None  # explicit null clears the override
 
 
 class ManualPriceIn(BaseModel):
@@ -103,6 +104,10 @@ def update_holding(holding_id: int, payload: HoldingUpdate, db: Session = Depend
     h = db.get(Holding, holding_id)
     if h is None:
         raise HTTPException(404, "holding not found")
+    if payload.account_id is not None:
+        if db.get(Account, payload.account_id) is None:
+            raise HTTPException(404, f"account {payload.account_id} not found")
+        h.account_id = payload.account_id
     if payload.ticker is not None:
         h.ticker = payload.ticker.upper()
     if payload.quantity is not None:
@@ -111,9 +116,11 @@ def update_holding(holding_id: int, payload: HoldingUpdate, db: Session = Depend
         h.price_currency = payload.price_currency.upper()
     if payload.asset_class is not None:
         h.asset_class = payload.asset_class
-    if payload.manual_price is not None:
+    if "manual_price" in payload.model_fields_set and payload.manual_price != h.manual_price:
         h.manual_price = payload.manual_price
-        h.manual_price_updated_at = datetime.now(UTC)
+        h.manual_price_updated_at = (
+            datetime.now(UTC) if payload.manual_price is not None else None
+        )
     db.commit()
     db.refresh(h)
     return _serialize(db, h)

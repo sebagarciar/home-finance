@@ -4,7 +4,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid,
 } from 'recharts'
-import { api, type Account, type AccountType, type FintualFund } from '../api/client'
+import { api, type Account, type AccountType, type FintualFund, type Holding } from '../api/client'
 import {
   useNetworthCurrent, useNetworthHistory, useHoldings, useAccounts,
 } from '../api/hooks'
@@ -65,6 +65,7 @@ function PortfolioOverview() {
   const [snapshotting, setSnapshotting] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   // Any write touches several of these; invalidating all is cheap and keeps the
   // page consistent (net worth depends on accounts + holdings + prices).
@@ -279,9 +280,9 @@ function PortfolioOverview() {
         </div>
 
         {showAdd && (
-          <AddHoldingForm
+          <HoldingForm
             accounts={investmentAccounts}
-            onCreated={async () => { setShowAdd(false); await reload() }}
+            onDone={async () => { setShowAdd(false); await reload() }}
           />
         )}
 
@@ -295,7 +296,19 @@ function PortfolioOverview() {
               <span className="num-col">Value</span>
               <span />
             </div>
-            {holdings.map((h) => (
+            {holdings.map((h) => editingId === h.id ? (
+              <div key={h.id} style={{ margin: '8px 0' }}>
+                <HoldingForm
+                  // A holding may sit under a non-investment account; keep it selectable.
+                  accounts={investmentAccounts.some((a) => a.id === h.account_id)
+                    ? investmentAccounts
+                    : [...investmentAccounts, ...(accountById[h.account_id] ? [accountById[h.account_id]] : [])]}
+                  holding={h}
+                  onCancel={() => setEditingId(null)}
+                  onDone={async () => { setEditingId(null); await reload() }}
+                />
+              </div>
+            ) : (
               <div key={h.id} className="holdings-row">
                 <span className="holding-ticker">
                   <span className="holding-symbol">{h.ticker}</span>
@@ -315,6 +328,13 @@ function PortfolioOverview() {
                 </span>
                 <span className="num num-col">{format(Number(h.value_in_base))}</span>
                 <span className="holding-actions">
+                  <button
+                    className="link-btn"
+                    onClick={() => setEditingId(h.id)}
+                    title="Edit holding"
+                  >
+                    edit
+                  </button>
                   <button
                     className="link-btn"
                     onClick={() => onManualPrice(h.id, h.manual_price)}
@@ -416,19 +436,26 @@ function AddAccountForm({ onCreated }: { onCreated: () => void }) {
   )
 }
 
-function AddHoldingForm({
+// Create a holding, or edit one when `holding` is given.
+function HoldingForm({
   accounts,
-  onCreated,
+  holding,
+  onDone,
+  onCancel,
 }: {
   accounts: Account[]
-  onCreated: () => void
+  holding?: Holding
+  onDone: () => void
+  onCancel?: () => void
 }) {
-  const [accountId, setAccountId] = useState<number | ''>(accounts[0]?.id ?? '')
-  const [ticker, setTicker] = useState('')
-  const [quantity, setQuantity] = useState('')
-  const [priceCurrency, setPriceCurrency] = useState('USD')
-  const [assetClass, setAssetClass] = useState('equity')
-  const [manualPrice, setManualPrice] = useState('')
+  const [accountId, setAccountId] = useState<number | ''>(holding?.account_id ?? accounts[0]?.id ?? '')
+  const [ticker, setTicker] = useState(holding?.ticker ?? '')
+  const [quantity, setQuantity] = useState(holding ? String(Number(holding.quantity)) : '')
+  const [priceCurrency, setPriceCurrency] = useState(holding?.price_currency ?? 'USD')
+  const [assetClass, setAssetClass] = useState(holding?.asset_class ?? 'equity')
+  const [manualPrice, setManualPrice] = useState(
+    holding?.manual_price != null ? String(Number(holding.manual_price)) : '',
+  )
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -437,18 +464,20 @@ function AddHoldingForm({
     if (accountId === '' || !ticker || !quantity) return
     setSubmitting(true)
     setErr(null)
+    const payload = {
+      account_id: Number(accountId),
+      ticker,
+      quantity: quantity.trim(),
+      price_currency: priceCurrency,
+      asset_class: assetClass,
+      manual_price: manualPrice.trim() === '' ? null : manualPrice.trim(),
+    }
     try {
-      await api.holdings.create({
-        account_id: Number(accountId),
-        ticker,
-        quantity,
-        price_currency: priceCurrency,
-        asset_class: assetClass,
-        manual_price: manualPrice.trim() === '' ? null : manualPrice.trim(),
-      })
-      onCreated()
+      if (holding) await api.holdings.update(holding.id, payload)
+      else await api.holdings.create(payload)
+      onDone()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Failed to add holding')
+      setErr(e instanceof Error ? e.message : holding ? 'Failed to save holding' : 'Failed to add holding')
     } finally {
       setSubmitting(false)
     }
@@ -474,7 +503,7 @@ function AddHoldingForm({
 
   return (
     <>
-      <FintualLookup onPick={onPickFintual} />
+      {!holding && <FintualLookup onPick={onPickFintual} />}
       <form className="add-holding" onSubmit={submit}>
         <select value={accountId} onChange={(e) => setAccountId(Number(e.target.value))}>
           {accounts.map((a) => (
@@ -511,9 +540,16 @@ function AddHoldingForm({
           onChange={(e) => setManualPrice(e.target.value)}
           inputMode="decimal"
         />
-        <button className="btn primary" disabled={submitting}>
-          {submitting ? 'Adding…' : 'Add'}
-        </button>
+        <span style={{ display: 'flex', gap: 6 }}>
+          {onCancel && (
+            <button type="button" className="btn" onClick={onCancel} disabled={submitting}>
+              Cancel
+            </button>
+          )}
+          <button className="btn primary" disabled={submitting}>
+            {holding ? (submitting ? 'Saving…' : 'Save') : (submitting ? 'Adding…' : 'Add')}
+          </button>
+        </span>
         {err && <div className="form-error">{err}</div>}
       </form>
     </>
