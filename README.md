@@ -4,6 +4,8 @@ A full-stack personal finance app for a two-person household spanning **Spain (E
 
 FastAPI + SQLAlchemy backend, React + TypeScript frontend, and a categorization pipeline that starts with rules and only falls back to a local LLM when rules run out.
 
+![Overview dashboard — net worth by type, monthly spending by category, total, and recent activity (sample data)](screenshots/overview-mock.jpg)
+
 ## What it does
 
 - **Imports real bank statements** — parsers for Revolut (CSV), Santander España (xlsx), and Scotiabank Chile (xls), each handling that bank's specific quirks (locale decimal formats, sparse layouts, minus-sign encoding). Plus **near-live ingestion**: Santander ES sends a transaction email per purchase, pulled over IMAP and fed through the same import pipeline so the dashboard updates without waiting for a monthly statement.
