@@ -4,9 +4,9 @@ import {
 } from 'recharts'
 import { useCurrency } from '../lib/currency'
 import { useSpendingSummary } from '../api/hooks'
-import { categoryStyle, categoryColorHex } from '../design/categories'
 import { chart } from '../design/chartTheme'
 import { MoneyTooltip } from '../components/MoneyTooltip'
+import { Overview } from '../components/Overview'
 import { HouseholdHealth } from '../components/HouseholdHealth'
 import { MonthlyStackedBar } from '../components/MonthlyStackedBar'
 import { CategoryMonthTable } from '../components/CategoryMonthTable'
@@ -28,18 +28,8 @@ export function Dashboard() {
     })
   }, [summary])
 
-  const categories = useMemo(() => {
-    if (!summary) return []
-    return [...summary.by_category]
-      .map((c) => ({ category: c.category, total: Number(c.total) }))
-      .filter((c) => c.total > 0)
-      .sort((a, b) => b.total - a.total)
-  }, [summary])
-
-  const totalSpend = categories.reduce((s, c) => s + c.total, 0)
-
   if (loading) return <DashboardSkeleton />
-  if (!summary || (flow.length === 0 && categories.length === 0)) {
+  if (!summary || (flow.length === 0 && summary.by_category.length === 0)) {
     return (
       <div className="card">
         <div className="empty">
@@ -51,6 +41,7 @@ export function Dashboard() {
 
   return (
     <>
+      <Overview />
       <HouseholdHealth />
 
       {/* Cash flow ─ income vs spend per month */}
@@ -69,12 +60,12 @@ export function Dashboard() {
           <AreaChart data={flow} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="g-income" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#6fcf4a" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#6fcf4a" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--positive)" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="var(--positive)" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="g-spend" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#ff6b8a" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#ff6b8a" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--negative)" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="var(--negative)" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid stroke={chart.grid.stroke} vertical={false} />
@@ -86,75 +77,23 @@ export function Dashboard() {
             />
             <Area
               type="monotone" dataKey="income" name="Income"
-              stroke="#6fcf4a" strokeWidth={2} fill="url(#g-income)"
+              stroke="var(--positive)" strokeWidth={2} fill="url(#g-income)"
             />
             <Area
               type="monotone" dataKey="spend" name="Spend"
-              stroke="#ff6b8a" strokeWidth={2} fill="url(#g-spend)"
+              stroke="var(--negative)" strokeWidth={2} fill="url(#g-spend)"
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Monthly spending comparison (stacked by category) + top categories */}
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Spending by month</h2>
-            <span className="card-meta">Stacked by category</span>
-          </div>
-          <MonthlyStackedBar data={summary.by_month_category} />
+      {/* Monthly spending comparison (stacked by category) */}
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Spending by month</h2>
+          <span className="card-meta">Stacked by category</span>
         </div>
-
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Top categories</h2>
-            <span className="card-meta">This period</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {categories.slice(0, 6).map((c) => {
-              const style = categoryStyle(c.category)
-              const pct = totalSpend > 0 ? (c.total / totalSpend) * 100 : 0
-              return (
-                <div key={c.category}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <span
-                      className="category-pill"
-                      style={{
-                        color: style.color,
-                        background: 'transparent',
-                      }}
-                    >
-                      <span className="dot" />
-                      {style.label}
-                    </span>
-                    <span className="num" style={{ fontSize: 13, fontWeight: 600 }}>
-                      {format(c.total)}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      height: 6,
-                      borderRadius: 999,
-                      background: 'var(--surface-raised)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: '100%',
-                        width: `${pct}%`,
-                        background: categoryColorHex(c.category),
-                        borderRadius: 999,
-                      }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-            {categories.length === 0 && <div className="empty">Nothing to show.</div>}
-          </div>
-        </div>
+        <MonthlyStackedBar data={summary.by_month_category} />
       </div>
 
       {/* Category × month matrix */}

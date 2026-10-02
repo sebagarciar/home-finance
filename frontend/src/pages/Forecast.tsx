@@ -15,7 +15,7 @@ const N_PATHS = 5000
 
 // Net-worth green, matching the Portfolio history chart. Bands fade from the
 // median outward; cobalt accent is reserved for CTAs, never chart fills.
-const LINE = '#6fcf4a'
+const LINE = '#1b5fd9'
 
 type View = 'forecast' | 'assumptions'
 
@@ -279,7 +279,7 @@ function FanTooltip({ active, payload, label, format }: FanTooltipProps) {
         borderRadius: 12,
         padding: '10px 14px',
         minWidth: 180,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        boxShadow: '0 8px 24px rgba(29,31,38,0.12)',
       }}
     >
       <div style={{ color: 'var(--text-muted)', fontSize: 11, marginBottom: 8, fontWeight: 500 }}>

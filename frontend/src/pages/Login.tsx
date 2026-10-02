@@ -171,7 +171,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--accent)",
     color: "#fff",
     border: "none",
-    borderRadius: "var(--radius-md)",
+    borderRadius: "var(--radius-pill)",
     cursor: "pointer",
     transition: "opacity 0.15s",
   },

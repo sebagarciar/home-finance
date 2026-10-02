@@ -142,8 +142,8 @@ function PortfolioOverview() {
             <AreaChart data={historyPoints} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="g-networth" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6fcf4a" stopOpacity={0.32} />
-                  <stop offset="100%" stopColor="#6fcf4a" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#1b5fd9" stopOpacity={0.32} />
+                  <stop offset="100%" stopColor="#1b5fd9" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={chart.grid.stroke} vertical={false} />
@@ -161,7 +161,7 @@ function PortfolioOverview() {
                 type="monotone"
                 dataKey="value"
                 name="Net worth"
-                stroke="#6fcf4a"
+                stroke="#1b5fd9"
                 strokeWidth={2}
                 fill="url(#g-networth)"
               />

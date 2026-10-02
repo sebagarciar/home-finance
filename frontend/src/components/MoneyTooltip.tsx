@@ -1,4 +1,4 @@
-// Dark-card Recharts tooltip used across all charts.
+// Card-style Recharts tooltip used across all charts.
 
 import type { ReactNode } from 'react'
 
@@ -27,12 +27,12 @@ export function MoneyTooltip({ active, payload, label, format, multi }: Props) {
   return (
     <div
       style={{
-        background: 'var(--surface-raised)',
+        background: 'var(--surface)',
         border: '1px solid var(--surface-border)',
         borderRadius: 12,
         padding: '10px 14px',
         minWidth: 160,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        boxShadow: '0 8px 24px rgba(29,31,38,0.12)',
       }}
     >
       {label != null && (

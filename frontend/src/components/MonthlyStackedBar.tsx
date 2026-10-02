@@ -48,7 +48,7 @@ export function MonthlyStackedBar({ data }: { data: ByMonthCategory }) {
           type="category"
           dataKey="month"
           {...chart.axis}
-          tick={{ fill: '#c9c9cd', fontSize: 12 }}
+          tick={{ fill: '#646876', fontSize: 12 }}
           width={64}
         />
         <Tooltip cursor={chart.cursor} content={<MoneyTooltip format={format} multi />} />

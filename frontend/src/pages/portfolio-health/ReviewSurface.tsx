@@ -304,7 +304,7 @@ function ExposureBreakdown({
           return (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ width: 120, fontSize: 13, color: 'var(--text-secondary)', flexShrink: 0 }}>{label}</div>
-              <div style={{ flex: 1, position: 'relative', height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ flex: 1, position: 'relative', height: 8, background: 'var(--surface-hover)', borderRadius: 4, overflow: 'hidden' }}>
                 <div style={{
                   position: 'absolute', left: 0, top: 0, height: '100%',
                   width: `${Math.min(pct, 100)}%`,
@@ -315,7 +315,7 @@ function ExposureBreakdown({
                 {/* limit marker */}
                 <div style={{
                   position: 'absolute', left: `${limit}%`, top: 0, height: '100%',
-                  width: 1, background: 'rgba(255,255,255,0.3)',
+                  width: 1, background: 'var(--text-faint)',
                 }} />
               </div>
               <div className="num" style={{
@@ -534,8 +534,8 @@ function MetadataEditor() {
                     <td>{row.diversified_fund === null ? <span style={{ color: 'var(--text-muted)' }}>—</span> : row.diversified_fund ? 'Yes' : 'No'}</td>
                     <td>
                       <span className="phr-sev" style={{
-                        background: row.source === 'manual' ? 'rgba(73,79,223,0.15)' : 'rgba(141,150,158,0.12)',
-                        color: row.source === 'manual' ? '#8b91f8' : 'var(--text-muted)',
+                        background: row.source === 'manual' ? 'var(--accent-bg)' : 'var(--surface-raised)',
+                        color: row.source === 'manual' ? 'var(--accent)' : 'var(--text-muted)',
                         fontSize: 11, padding: '2px 7px', borderRadius: 999,
                       }}>
                         {row.source}
@@ -588,8 +588,8 @@ function AiExplanationCard({ exp }: { exp: AiExplanation }) {
       <div className="card-header">
         <h2 className="card-title">Review narrative</h2>
         <span className="phr-sev" style={{
-          background: isAi ? 'rgba(73,79,223,0.15)' : 'rgba(141,150,158,0.15)',
-          color: isAi ? '#8b91f8' : 'var(--text-muted)',
+          background: isAi ? 'var(--accent-bg)' : 'var(--surface-raised)',
+          color: isAi ? 'var(--accent)' : 'var(--text-muted)',
           fontSize: 11,
           padding: '2px 8px',
           borderRadius: 999,

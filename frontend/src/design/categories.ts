@@ -49,14 +49,14 @@ function resolveVars(): Record<string, string> {
   if (typeof window === 'undefined') return {}
   const cs = getComputedStyle(document.documentElement)
   _resolved = {
-    'var(--cat-1)': cs.getPropertyValue('--cat-1').trim() || '#494fdf',
-    'var(--cat-2)': cs.getPropertyValue('--cat-2').trim() || '#00a87e',
-    'var(--cat-3)': cs.getPropertyValue('--cat-3').trim() || '#e61e49',
-    'var(--cat-4)': cs.getPropertyValue('--cat-4').trim() || '#b09000',
-    'var(--cat-5)': cs.getPropertyValue('--cat-5').trim() || '#007bc2',
-    'var(--cat-6)': cs.getPropertyValue('--cat-6').trim() || '#ec7e00',
-    'var(--cat-7)': cs.getPropertyValue('--cat-7').trim() || '#936d62',
-    'var(--cat-8)': cs.getPropertyValue('--cat-8').trim() || '#8d969e',
+    'var(--cat-1)': cs.getPropertyValue('--cat-1').trim() || '#1b5fd9',
+    'var(--cat-2)': cs.getPropertyValue('--cat-2').trim() || '#13a37f',
+    'var(--cat-3)': cs.getPropertyValue('--cat-3').trim() || '#e0742a',
+    'var(--cat-4)': cs.getPropertyValue('--cat-4').trim() || '#8c5bd6',
+    'var(--cat-5)': cs.getPropertyValue('--cat-5').trim() || '#d6a400',
+    'var(--cat-6)': cs.getPropertyValue('--cat-6').trim() || '#d1477a',
+    'var(--cat-7)': cs.getPropertyValue('--cat-7').trim() || '#3a9bd1',
+    'var(--cat-8)': cs.getPropertyValue('--cat-8').trim() || '#9aa0ad',
   }
   return _resolved
 }
