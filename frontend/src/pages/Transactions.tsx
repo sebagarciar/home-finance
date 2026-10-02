@@ -296,7 +296,12 @@ function TxnRow({
   const mainAmountStr = nativeMatchesDisplay
     ? `${amtNative > 0 ? '+' : ''}${formatAs(amtNative)}`
     : `${amtBase > 0 ? '+' : ''}${format(amtBase)}`
-  const merchant = txn.normalized_description || txn.raw_description || '—'
+  // Transfers: show the full bank text (direction, counterparty, CONCEPTO) — the
+  // normalized form strips exactly the detail needed to classify them.
+  const isTransfer = txn.txn_type === 'transfer'
+  const merchant = isTransfer
+    ? txn.raw_description || txn.normalized_description || '—'
+    : txn.normalized_description || txn.raw_description || '—'
   const account = accounts?.find((a) => a.id === txn.account_id)
 
   return (
@@ -309,7 +314,9 @@ function TxnRow({
         {style.icon}
       </div>
       <div style={{ minWidth: 0 }}>
-        <div className="txn-merchant">{merchant}</div>
+        <div className={isTransfer ? 'txn-merchant wrap' : 'txn-merchant'} title={merchant}>
+          {merchant}
+        </div>
         <div className="txn-meta">
           <span className="category-pill" style={{ color }}>
             <span className="dot" />
