@@ -173,4 +173,3 @@ Phase 6 shipped: `services/forecast/` (block-bootstrap sampler over VT/AGG with 
 - Stay in the active phase; don't scope-creep into future phases.
 - When real-world data exposes a bug (it has, several times), fix the root cause — don't paper over with special cases.
 - When a user-facing decision needs making (taxonomy choice, transfer auto-exclusion, sample files, etc.), ask via AskUserQuestion before committing to an approach.
-- **For any frontend work** (adding/editing components, styling, layouts, charts, new pages — anything under `frontend/`), invoke the `finance-dashboard-design` skill first. It defines the canonical tokens, chart config, and component patterns; never style dashboard UI from scratch without consulting it.
