@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
 # the text/plain part of these emails strips them ("retencion", not "retención").
 _AMT = r"(?P<amount>[\d.,]+)\s*(?P<ccy>[A-Z]{3})"
 
+# Sentence-ending period: a "." at end of body, or followed by a prose word
+# (lowercase 2nd letter, e.g. "Consulta"). A bare "\." stops inside dotted
+# merchant names ("P.MALLORCA VELA" -> "P", "E.S. REPSOL" -> "E"); terminal
+# merchant names are upper-case, so they never look like the next sentence.
+# (?-i:) keeps the case test strict under the patterns' IGNORECASE flag.
+_EOS = r"\.(?=\s*$|(?-i:\s+[A-ZÁÉÍÓÚÑ¿¡]?[a-záéíóúñ]))"
+
 # (regex, txn_type, sign, default_merchant)
 # sign multiplies the magnitude from _parse_amount.
 # default_merchant: fixed description when the email carries no merchant name
@@ -47,7 +54,7 @@ _PATTERNS: list[tuple[re.Pattern[str], TxnType, int, str | None]] = [
     (
         re.compile(
             r"has pagado\s+" + _AMT
-            + r"\s+con tu tarjeta(?:\s+terminada en\s+\d+)?\s+en\s+(?P<merchant>.+?)(?:\.|$)",
+            + r"\s+con tu tarjeta(?:\s+terminada en\s+\d+)?\s+en\s+(?P<merchant>.+?)(?:" + _EOS + r"|$)",
             re.IGNORECASE | re.DOTALL,
         ),
         TxnType.card_payment,
@@ -68,7 +75,7 @@ _PATTERNS: list[tuple[re.Pattern[str], TxnType, int, str | None]] = [
     # "... compra de <AMT> en <MERCHANT> ..." / "... cargo de <AMT> en <MERCHANT> ..."
     (
         re.compile(
-            r"(?:compra|cargo) de\s+" + _AMT + r"\s+en\s+(?P<merchant>.+?)(?:\.|\bcon\b|$)",
+            r"(?:compra|cargo) de\s+" + _AMT + r"\s+en\s+(?P<merchant>.+?)(?:" + _EOS + r"|\bcon\b|$)",
             re.IGNORECASE | re.DOTALL,
         ),
         TxnType.card_payment,
@@ -78,7 +85,7 @@ _PATTERNS: list[tuple[re.Pattern[str], TxnType, int, str | None]] = [
     # "... abono/ingreso/devolucion de <AMT> de <MERCHANT> ..." -> inflow
     (
         re.compile(
-            r"(?:abono|ingreso|devoluci[oó]?n) de\s+" + _AMT + r"\s+(?:de|por)\s+(?P<merchant>.+?)(?:\.|$)",
+            r"(?:abono|ingreso|devoluci[oó]?n) de\s+" + _AMT + r"\s+(?:de|por)\s+(?P<merchant>.+?)(?:" + _EOS + r"|$)",
             re.IGNORECASE | re.DOTALL,
         ),
         TxnType.refund,

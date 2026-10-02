@@ -68,6 +68,20 @@ def test_parses_transfer_salida():
     assert p.raw_description == "Transferencia"
 
 
+@pytest.mark.parametrize("merchant", ["P.MALLORCA VELA", "E.S. REPSOL", "LICENCIA 00195"])
+def test_pago_keeps_dotted_merchant(merchant):
+    # Regression: the merchant capture used to stop at the first "." ("P.MALLORCA" -> "P").
+    raw = _raw_email(
+        "Maria Jesus, te confirmamos que has pagado 44.65 EUR con tu tarjeta "
+        f"terminada en 3653 en {merchant}. Consulta todos tus detalles y "
+        "movimientos en tu Banca Online."
+    )
+    p = parse_santander_email(raw)
+    assert p is not None
+    assert p.amount == Decimal("-44.65")
+    assert p.raw_description == merchant
+
+
 def test_unrecognised_email_returns_none():
     raw = _raw_email("Hola, tu extracto mensual ya está disponible en la app.")
     assert parse_santander_email(raw) is None
