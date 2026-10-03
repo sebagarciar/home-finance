@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type ImportPreview } from '../api/client'
-import { useAccounts } from '../api/hooks'
+import { queryKeys, useAccounts } from '../api/hooks'
+import { useNav } from '../lib/nav'
 
 const PARSERS = [
   { value: 'revolut', label: 'Revolut (CSV)' },
@@ -14,7 +15,8 @@ const PREVIEW_LIMIT = 200
 export function Import() {
   const qc = useQueryClient()
   const accounts = useAccounts().data ?? []
-  const [accountId, setAccountId] = useState<number | ''>('')
+  const { intent } = useNav()
+  const [accountId, setAccountId] = useState<number | ''>(intent?.accountId ?? '')
   const [parser, setParser] = useState('revolut')
   const [statementYear, setStatementYear] = useState<number>(new Date().getFullYear())
   const [file, setFile] = useState<File | null>(null)
@@ -33,6 +35,7 @@ export function Import() {
       qc.invalidateQueries({ queryKey: ['transactions'] }),
       qc.invalidateQueries({ queryKey: ['spending'] }),
       qc.invalidateQueries({ queryKey: ['networth'] }),
+      qc.invalidateQueries({ queryKey: queryKeys.attention() }),
     ])
 
   const doSyncEmail = async () => {

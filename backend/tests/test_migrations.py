@@ -16,7 +16,7 @@ def test_upgrade_to_head_builds_schema_and_is_idempotent(tmp_path: Path):
     eng = create_engine(url)
     tables = set(inspect(eng).get_table_names())
     eng.dispose()
-    assert {"alembic_version", "transactions", "holdings", "investment_trades"} <= tables
+    assert {"alembic_version", "transactions", "holdings", "investment_trades", "attention_dismissals"} <= tables
 
 
 def test_upgrade_to_head_leaves_app_loggers_alone(tmp_path: Path):

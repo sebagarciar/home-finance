@@ -333,7 +333,7 @@ def test_migration_up_and_down(tmp_path: Path):
     eng = create_engine(url)
     assert "investment_trades" in inspect(eng).get_table_names()
     eng.dispose()
-    run("downgrade", "-1")
+    run("downgrade", "d4e5f6a7b8c9")  # the revision before investment_trades
     eng = create_engine(url)
     assert "investment_trades" not in inspect(eng).get_table_names()
     eng.dispose()

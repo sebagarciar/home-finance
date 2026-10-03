@@ -21,6 +21,7 @@ export const queryKeys = {
   holdings: () => ['holdings'] as const,
   trades: (holdingId: number) => ['trades', holdingId] as const,
   performance: () => ['performance'] as const,
+  attention: () => ['attention'] as const,
   accounts: () => ['accounts'] as const,
   categories: () => ['categories'] as const,
   transactions: (params: TxnParams) => ['transactions', params] as const,
@@ -79,6 +80,10 @@ export function useTrades(holdingId: number) {
 
 export function usePerformance() {
   return useQuery({ queryKey: queryKeys.performance(), queryFn: () => api.performance() })
+}
+
+export function useAttention() {
+  return useQuery({ queryKey: queryKeys.attention(), queryFn: () => api.attention.list() })
 }
 
 export function useAccounts() {

@@ -11,8 +11,7 @@ const Forecast = lazy(() => import('./pages/Forecast').then((m) => ({ default: m
 const Transactions = lazy(() => import('./pages/Transactions').then((m) => ({ default: m.Transactions })))
 import { CurrencyProvider, useCurrency } from './lib/currency'
 import { clearToken, getToken, registerUnauthorizedHandler } from './lib/auth'
-
-type Tab = 'dashboard' | 'portfolio' | 'forecast' | 'transactions'
+import { NavContext, type NavIntent, type Tab } from './lib/nav'
 
 const TABS: Tab[] = ['dashboard', 'portfolio', 'forecast', 'transactions']
 
@@ -140,6 +139,11 @@ function Header({ tab }: { tab: Tab }) {
 
 export function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [intent, setIntent] = useState<NavIntent | null>(null)
+  const go = (t: Tab, i?: NavIntent) => {
+    setIntent(i ?? null)
+    setTab(t)
+  }
   const [authed, setAuthed] = useState(() => getToken() !== null)
 
   useEffect(() => {
@@ -157,8 +161,9 @@ export function App() {
 
   return (
     <CurrencyProvider>
+      <NavContext.Provider value={{ go, intent }}>
       <div className="app-shell">
-        <TopNav tab={tab} setTab={setTab} onLogout={handleLogout} />
+        <TopNav tab={tab} setTab={(t) => go(t)} onLogout={handleLogout} />
         <main className="main">
           <div className="content">
             <Header tab={tab} />
@@ -171,6 +176,7 @@ export function App() {
           </div>
         </main>
       </div>
+      </NavContext.Provider>
     </CurrencyProvider>
   )
 }

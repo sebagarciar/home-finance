@@ -2,9 +2,10 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type Account, type Category, type Transaction, type TxnType } from '../api/client'
 import { useCurrency } from '../lib/currency'
-import { useTransactions, useCategories, useAccounts } from '../api/hooks'
+import { queryKeys, useTransactions, useCategories, useAccounts } from '../api/hooks'
 import { categoryStyle, categoryColorHex } from '../design/categories'
 import { PageLoading } from '../components/PageLoading'
+import { useNav } from '../lib/nav'
 
 // Import flow is its own chunk — only fetched when the sub-tab is opened.
 const Import = lazy(() => import('./Import').then((m) => ({ default: m.Import })))
@@ -13,7 +14,8 @@ type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
 type View = 'transactions' | 'import'
 
 export function Transactions() {
-  const [view, setView] = useState<View>('transactions')
+  const { intent } = useNav()
+  const [view, setView] = useState<View>(intent?.view ?? 'transactions')
   return (
     <>
       <div className="subtabs">
@@ -43,8 +45,9 @@ function TransactionsView() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [category, setCategory] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
+  const { intent } = useNav()
+  const [category, setCategory] = useState(intent?.category ?? '')
+  const [dateFrom, setDateFrom] = useState(intent?.start ?? '')
   const [dateTo, setDateTo] = useState('')
   const [sort, setSort] = useState<SortKey>('date_desc')
   const [showArchived, setShowArchived] = useState(false)
@@ -70,7 +73,11 @@ function TransactionsView() {
   const accounts = useAccounts().data ?? []
   const loading = txnsQ.isLoading
   const [exporting, setExporting] = useState(false)
-  const reload = () => qc.invalidateQueries({ queryKey: ['transactions'] })
+  const reload = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['transactions'] }),
+      qc.invalidateQueries({ queryKey: queryKeys.attention() }),
+    ])
 
   async function exportCsv() {
     setExporting(true)

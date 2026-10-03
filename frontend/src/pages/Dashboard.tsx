@@ -8,6 +8,7 @@ import { chart } from '../design/chartTheme'
 import { MoneyTooltip } from '../components/MoneyTooltip'
 import { Overview } from '../components/Overview'
 import { HouseholdHealth } from '../components/HouseholdHealth'
+import { NeedsAttention } from '../components/NeedsAttention'
 import { MonthlyStackedBar } from '../components/MonthlyStackedBar'
 import { CategoryMonthTable } from '../components/CategoryMonthTable'
 
@@ -31,16 +32,20 @@ export function Dashboard() {
   if (loading) return <DashboardSkeleton />
   if (!summary || (flow.length === 0 && summary.by_category.length === 0)) {
     return (
-      <div className="card">
-        <div className="empty">
-          No data yet. Import a bank statement to populate your dashboard.
+      <>
+        <NeedsAttention />
+        <div className="card">
+          <div className="empty">
+            No data yet. Import a bank statement to populate your dashboard.
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
     <>
+      <NeedsAttention />
       <Overview />
       <HouseholdHealth />
 

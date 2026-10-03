@@ -1,5 +1,6 @@
 from .accounts import Account, AccountType
 from .assumptions import Assumptions
+from .attention import AttentionDismissal
 from .categories import Category, CategoryRule, RuleSource
 from .fx import FxRate
 from .holdings import Holding
@@ -19,6 +20,7 @@ __all__ = [
     "Account",
     "AccountType",
     "Assumptions",
+    "AttentionDismissal",
     "Category",
     "CategoryRule",
     "RuleSource",

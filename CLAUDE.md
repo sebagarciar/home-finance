@@ -176,16 +176,28 @@ Plan: [docs/plans/cost-basis.md](docs/plans/cost-basis.md).
   - Holdings table: a Gain column.
   - Per-holding trades modal: [components/TradesModal.tsx](frontend/src/components/TradesModal.tsx). It opens as "Set starting position" when the ledger is empty.
 
+## Needs attention (Overview)
+
+A card at the top of Overview lists computed signals that the data has gone stale. Nothing new is entered.
+
+- Logic: [services/attention/checks.py](backend/app/services/attention/checks.py), served by `GET /attention`. Read-only and network-free: prices are judged from `price_cache` + `manual_price_updated_at`, never by calling a provider.
+- The five checks:
+  - **Stale balance:** set more than 30 days ago. Skipped when zero and never set (the seeded `Manual` catch-all, or empty accounts) and for investment accounts holding no cash.
+  - **Missing statement:** a closed month with live `email` rows and no `statement` rows.
+  - **Uncategorized:** `Other` or null rows in the last ~6 months.
+  - **Transfer pair:** different accounts, **same currency, exact opposite amount**, ≤3 days apart, last 120 days, matched closest-first. Cross-currency moves are deliberately excluded to avoid false positives. **Suggest only; the user archives.**
+  - **Stale price:** no cache entry in 7 days and no manual price in 30.
+- Dismissals live in `attention_dismissals` (`POST /attention/dismiss`, `DELETE /attention/dismissals`). Item keys embed the state they were raised on (a balance's update date, a count), so an item resurfaces when that state changes.
+- UI: [components/NeedsAttention.tsx](frontend/src/components/NeedsAttention.tsx).
+  - Inline fixes: update a balance or price, archive both sides of a transfer pair.
+  - Deep links (via [lib/nav.ts](frontend/src/lib/nav.ts), a tab + "intent" context) to Transactions filtered to `Other`, and to Import with the account preselected.
+  - Writes that can resolve an item invalidate the `['attention']` query.
+
 ## What's next
 
 Roadmap after the Oct 2026 product review (full write-up: `~/.claude/plans/i-want-you-to-zazzy-valley.md`). The theme: fewer inputs and screens, and more derived from data that already exists.
 
-1. **Needs attention / close the month** at the top of Overview. Computed only:
-   - balances not updated in about 30 days
-   - months with email rows but no statement
-   - count of rows in `Other`
-   - likely own-account transfer pairs (suggest only, never auto-archive)
-   - stale manual prices
+1. ~~Needs attention~~: shipped (section above).
 2. **Slim Overview.** Show the month's spend once. Move the stacked bar and category × month table to a Spending view. Add a global "+ Update" button: import statement, sync email, update all balances.
 3. **One household profile.** Income, spend and big expenses are duplicated across Assumptions and the Health questionnaire. Derive spend, cash and current allocation from data; store only what the data can't tell (target allocation, risk answers, planned big expenses). Cut the Portfolio Health Review down to a few plain checks, with no composite score. Its Stages 2–4 are frozen.
 4. **Goal-based forecast.** Amount + date → probability. Default horizon 5–10 years, with expert settings (ρ, σ, FX drift) behind "Advanced".

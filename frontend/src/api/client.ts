@@ -122,6 +122,31 @@ export interface Holding {
   value_in_base: string;
 }
 
+/** Needs-attention items (GET /attention). Wording lives in the UI; the backend sends facts. */
+export interface AttentionTxnRef {
+  id: number;
+  account_id: number;
+  account_name: string;
+  date: string;
+  description: string;
+}
+export type AttentionItem =
+  | { kind: "stale_balance"; key: string; account_id: number; account_name: string; currency: string;
+      current_balance: string; updated_on: string | null; age_days: number | null }
+  | { kind: "statement_missing"; key: string; account_id: number; account_name: string;
+      month: string; email_rows: number }
+  | { kind: "transfer_pair"; key: string; currency: string; amount: string;
+      out: AttentionTxnRef; in: AttentionTxnRef }
+  | { kind: "uncategorized"; key: string; count: number; since: string; category: string }
+  | { kind: "stale_price"; key: string; holding_id: number; ticker: string; currency: string;
+      manual_price: string | null; last_priced_on: string | null };
+
+export interface AttentionResponse {
+  items: AttentionItem[];
+  /** Items currently hidden by a dismissal. */
+  dismissed: number;
+}
+
 export type TradeKind = "opening" | "buy" | "sell" | "dividend" | "fee";
 
 /** One cost-basis ledger row. Amounts are native (`currency` = holding's price currency). */
@@ -658,6 +683,13 @@ export const api = {
   },
 
   performance: () => request<Performance>("/performance"),
+
+  attention: {
+    list: () => request<AttentionResponse>("/attention"),
+    dismiss: (key: string) =>
+      request<void>("/attention/dismiss", { method: "POST", body: JSON.stringify({ key }) }),
+    restoreAll: () => request<void>("/attention/dismissals", { method: "DELETE" }),
+  },
 
   networth: {
     current: () => request<NetworthCurrent>("/networth/current"),

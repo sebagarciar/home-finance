@@ -10,6 +10,7 @@ from .migrations import upgrade_to_head
 from .routers import (
     accounts,
     assumptions,
+    attention,
     auth,
     categories,
     forecast,
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(categories.router, dependencies=_protected)
     app.include_router(spending.router, dependencies=_protected)
     app.include_router(holdings.router, dependencies=_protected)
+    app.include_router(attention.router, dependencies=_protected)
     app.include_router(networth.router, dependencies=_protected)
     app.include_router(prices.router, dependencies=_protected)
     app.include_router(forecast.router, dependencies=_protected)
