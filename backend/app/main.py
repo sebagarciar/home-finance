@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import get_current_user
 from .config import get_settings
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal
+from .migrations import upgrade_to_head
 from .routers import (
     accounts,
     assumptions,
@@ -16,7 +17,9 @@ from .routers import (
     health,
     holdings,
     imports,
+    investment_trades,
     networth,
+    performance,
     portfolio_health,
     prices,
     spending,
@@ -27,9 +30,9 @@ from .seeds.defaults import seed
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Phase 1: create tables directly so the app runs end-to-end without alembic upgrade.
-    # Alembic migrations are the source of truth for prod-style deploys.
-    Base.metadata.create_all(bind=engine)
+    # Alembic is the source of truth for schema. (create_all here used to race
+    # migrations: a reload created new tables first, then `upgrade` failed.)
+    upgrade_to_head()
     with SessionLocal() as db:
         seed(db)
     yield
@@ -60,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(forecast.router, dependencies=_protected)
     app.include_router(assumptions.router, dependencies=_protected)
     app.include_router(portfolio_health.router, dependencies=_protected)
+    app.include_router(investment_trades.router, dependencies=_protected)
+    app.include_router(performance.router, dependencies=_protected)
     return app
 
 

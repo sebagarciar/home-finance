@@ -20,3 +20,9 @@ class Holding(Base):
     manual_price_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     account = relationship("Account", back_populates="holdings")
+    trades = relationship(
+        "InvestmentTrade",
+        back_populates="holding",
+        cascade="all, delete-orphan",
+        order_by="(InvestmentTrade.date, InvestmentTrade.id)",
+    )

@@ -3,6 +3,7 @@ from .assumptions import Assumptions
 from .categories import Category, CategoryRule, RuleSource
 from .fx import FxRate
 from .holdings import Holding
+from .investment_trades import InvestmentTrade, TradeKind
 from .networth import NetworthSnapshot
 from .portfolio_health import (
     InvestmentPolicyProfile,
@@ -23,6 +24,8 @@ __all__ = [
     "RuleSource",
     "FxRate",
     "Holding",
+    "InvestmentTrade",
+    "TradeKind",
     "NetworthSnapshot",
     "InvestorProfile",
     "InvestmentPolicyProfile",
