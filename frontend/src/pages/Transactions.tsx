@@ -18,7 +18,9 @@ const VIEW_LABEL: Record<View, string> = { transactions: 'Transactions', trends:
 
 export function Transactions() {
   const { intent } = useNav()
-  const [view, setView] = useState<View>(intent?.view ?? 'transactions')
+  const [view, setView] = useState<View>(
+    intent?.view && intent.view in VIEW_LABEL ? (intent.view as View) : 'transactions',
+  )
   return (
     <>
       <div className="subtabs">

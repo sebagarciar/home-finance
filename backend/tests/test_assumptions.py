@@ -1,4 +1,4 @@
-"""Phase 7: assumptions GET/PUT endpoint tests."""
+"""Household profile (/assumptions) GET/PUT + derived endpoint tests."""
 from __future__ import annotations
 
 import pytest
@@ -51,9 +51,11 @@ def test_get_assumptions_returns_seeded_defaults(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["horizon_years"] == 30
-    assert body["asset_allocation"]["equity"] == 0.7
-    # Seeded defaults: no income/spending set yet.
+    assert "asset_allocation" not in body  # the forecast uses the current mix
+    # Seeded defaults: no income set, spending derived (no override).
     assert float(body["income_user1"]) == 0
+    assert body["spending_override_monthly"] is None
+    assert body["planned_expenses"] == []
 
 
 def test_put_partial_update_persists(client):
@@ -62,7 +64,7 @@ def test_put_partial_update_persists(client):
         json={
             "income_user1": "2500000",
             "income_user1_currency": "clp",
-            "spending_baseline_monthly": "1800000",
+            "spending_override_monthly": "1800000",
             "horizon_years": 25,
         },
     )
@@ -70,18 +72,43 @@ def test_put_partial_update_persists(client):
     body = r.json()
     assert float(body["income_user1"]) == 2500000
     assert body["income_user1_currency"] == "CLP"  # upper-cased
-    assert float(body["spending_baseline_monthly"]) == 1800000
+    assert float(body["spending_override_monthly"]) == 1800000
     assert body["horizon_years"] == 25
     # Untouched field keeps its default.
-    assert body["asset_allocation"]["equity"] == 0.7
+    assert body["inflation_rate"] == 0.03
 
     # Persisted across requests.
     assert float(client.get("/assumptions").json()["income_user1"]) == 2500000
 
 
-def test_put_rejects_negative_allocation(client):
-    r = client.put("/assumptions", json={"asset_allocation": {"equity": -0.1, "bonds": 1.1}})
-    assert r.status_code == 422
+def test_override_clears_with_explicit_null(client):
+    client.put("/assumptions", json={"spending_override_monthly": "900"})
+    body = client.put("/assumptions", json={"spending_override_monthly": None}).json()
+    assert body["spending_override_monthly"] is None
+    # A null for any other (non-nullable) field is ignored, not a 500.
+    assert client.put("/assumptions", json={"horizon_years": None}).status_code == 200
+
+
+def test_planned_expenses_validated_and_sorted(client):
+    r = client.put("/assumptions", json={"planned_expenses": [
+        {"label": "Car", "amount": "8000", "currency": "eur", "month": "2027-06"},
+        {"label": "Flights", "amount": "1200", "currency": "EUR", "month": "2026-12"},
+    ]})
+    assert r.status_code == 200, r.text
+    assert [e["month"] for e in r.json()["planned_expenses"]] == ["2026-12", "2027-06"]
+    assert r.json()["planned_expenses"][1]["currency"] == "EUR"
+    bad = {"label": "x", "amount": "10", "currency": "EUR", "month": "2027-13"}
+    assert client.put("/assumptions", json={"planned_expenses": [bad]}).status_code == 422
+    zero = {"label": "x", "amount": "0", "currency": "EUR", "month": "2027-01"}
+    assert client.put("/assumptions", json={"planned_expenses": [zero]}).status_code == 422
+
+
+def test_derived_endpoint_without_data(client):
+    body = client.get("/assumptions/derived").json()
+    assert body["spending"] == {
+        "derived_monthly": None, "months": [], "effective_monthly": "0", "source": "none",
+    }
+    assert body["allocation"] == {"equity": 0.0, "bonds": 0.0, "cash": 1.0}
 
 
 def test_put_rejects_out_of_range_horizon(client):
@@ -95,7 +122,7 @@ def test_assumptions_feed_forecast(client):
     client.put(
         "/assumptions",
         json={
-            "spending_baseline_monthly": "5000000",
+            "spending_override_monthly": "5000000",
             "income_user1": "0",
             "income_user2": "0",
             "horizon_years": 5,
@@ -107,3 +134,5 @@ def test_assumptions_feed_forecast(client):
     # With zero start net worth (no accounts) and pure spending, terminal median
     # is negative.
     assert body["terminal"]["p50"] < body["start_networth"]
+    assert body["inputs"]["spending_source"] == "override"
+    assert body["inputs"]["monthly_spending"] == 5000000

@@ -87,11 +87,10 @@ def test_deterministic_matches_compound_growth(session):
     # Zero out all stochasticity and flows so NW is pure compounding.
     a.income_user1 = Decimal("0")
     a.income_user2 = Decimal("0")
-    a.spending_baseline_monthly = Decimal("0")
+    a.spending_override_monthly = Decimal("0")  # override, so no derived spend
     a.income_noise_sigma = Decimal("0")
     a.correlation_rho = Decimal("0")
     a.fx_drift_annual = Decimal("0")
-    a.asset_allocation = {"equity": 1.0}
     a.return_assumptions = {"equity": 0.06}
     a.horizon_years = 10
     session.commit()
@@ -102,6 +101,7 @@ def test_deterministic_matches_compound_growth(session):
         n_paths=200,
         seed=1,
         returns_mode="deterministic",
+        allocation={"equity": 1.0},
     )
 
     start = result["start_networth"]

@@ -6,8 +6,8 @@ import { createContext, useContext } from 'react'
 export type Tab = 'dashboard' | 'portfolio' | 'forecast' | 'transactions'
 
 export interface NavIntent {
-  /** Transactions sub-view. */
-  view?: 'transactions' | 'trends' | 'import'
+  /** Sub-view of the target tab (Spending or Forecast). */
+  view?: 'transactions' | 'trends' | 'import' | 'forecast' | 'profile'
   category?: string
   start?: string
   accountId?: number

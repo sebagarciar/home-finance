@@ -162,6 +162,7 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 - Frontend query hooks: [frontend/src/api/hooks.ts](frontend/src/api/hooks.ts) (TanStack Query — use these from pages, not raw `useEffect + fetch`)
 - Price providers: [backend/app/services/prices/](backend/app/services/prices/) — `provider.py` (composite + yfinance), `fintual.py` (Fintual API + name search), `valuation.py`
 - Cost basis / performance: [backend/app/services/performance/](backend/app/services/performance/) (`basis.py` replay, `attribution.py` asset-vs-FX split, `returns.py` XIRR, `service.py`); UI in [frontend/src/components/TradesModal.tsx](frontend/src/components/TradesModal.tsx) + Portfolio page
+- Household profile: [backend/app/services/household/](backend/app/services/household/) (derived figures) + [frontend/src/pages/Profile.tsx](frontend/src/pages/Profile.tsx)
 - Forecast engine: [backend/app/services/forecast/](backend/app/services/forecast/) — `blocks.py` (return sourcing + block bootstrap + `shock_mask`), `engine.py` (`run_forecast`). Endpoint `POST /forecast/run` in [backend/app/routers/forecast.py](backend/app/routers/forecast.py); UI in [frontend/src/pages/Forecast.tsx](frontend/src/pages/Forecast.tsx).
 
 ## Forecast model (Phase 6)
@@ -172,11 +173,34 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 - **Correlated shocks (ρ):** in bottom-decile market months (`shock_mask`), income scales down and spending up by ρ × magnitude. ρ default 0.3.
 - **Real terms by default** (deterministic inflation deflator); `real=false` for nominal. Inflation is not yet sampled (single `inflation_rate`) — future extension.
 - **FX scenario** is flat by default; `fx_drift_annual` drifts only the foreign-currency income share, never bundled into returns.
-- Reads the single seeded `assumptions` row; the Forecast page only exposes run controls (horizon, real/nominal, target). **Full assumptions editing is Phase 7.**
+- **Inputs** come from the household profile plus derived figures (see "Household profile"):
+  - **start** = today's *live* net worth (not the last snapshot);
+  - **weights** = the *current* mix from net worth (`current_allocation`; `run_forecast(..., allocation=)` overrides it for tests and what-ifs);
+  - **spending** = the override, else the derived average;
+  - **planned expenses** = dated outflows in the step covering their month.
 
-## Assumptions (Phase 7)
+  The response's `inputs` block echoes what was used, and the Forecast page shows it in one line.
 
-`GET/PUT /assumptions` ([backend/app/routers/assumptions.py](backend/app/routers/assumptions.py)) over the single seeded row; PUT is a partial update (only sent fields change), validates ranges, upper-cases currencies, and rejects negative allocations. UI in [frontend/src/pages/Assumptions.tsx](frontend/src/pages/Assumptions.tsx), rendered as an in-page sub-tab of the Forecast page (no separate sidebar entry — the `Forecast` wrapper in [frontend/src/pages/Forecast.tsx](frontend/src/pages/Forecast.tsx) switches Forecast ↔ Assumptions): sectioned form (income / spending / returns+allocation / forecast params), money fields with a currency select, rates shown as %. Saving invalidates the `['forecast']` query so the Forecast page recomputes. **"Use my avg" links** fill income/spending from the last ≤12 statemented months (`useSpendingSummary`) — the bridge between the (intentionally forecast-excluded) transaction history and the manual assumption inputs.
+## Household profile (Forecast → Profile)
+
+One source for every household input; the forecast and the Health Review both read it. **Store only what the data can't tell; derive the rest.**
+
+- **Stored** in the single `assumptions` row, via `GET/PUT /assumptions` ([routers/assumptions.py](backend/app/routers/assumptions.py)). PUT is a partial update.
+  - Income lines and growth.
+  - `spending_override_monthly`: **nullable**; NULL means use the derived average. An explicit `null` clears it.
+  - `planned_expenses`: `[{label, amount, currency, month: "YYYY-MM"}]`.
+  - Forecast settings: returns, inflation, horizon, ρ, σ, FX drift.
+  - There is **no `asset_allocation`**.
+- **Derived** in [services/household/derived.py](backend/app/services/household/derived.py), and served by `GET /assumptions/derived`, a separate call because it prices holdings.
+  - Monthly spend = average of the last ≤6 **complete** months, using the shared spending rules in [services/spending.py](backend/app/services/spending.py) (the same ones the dashboard uses).
+  - Liquid cash = bank cash plus cash-class holdings.
+  - Current mix = net worth by class, mapped to equity/bonds/cash. Unknown classes count as equity; debt is excluded.
+- **Risk & goal answers** stay in `investor_profiles` (history; reviews reference them) via `/portfolio-health/profile`. The **money columns were dropped** in migration `b8c9d0e1f2a3`. The review takes spending, liquid cash and planned expenses from the household instead, and notes in `missing_data` when there's no spending figure.
+- UI: [pages/Profile.tsx](frontend/src/pages/Profile.tsx).
+  - Derived tiles.
+  - Household form: income, spending override, planned expenses, settings under "Show settings".
+  - The trimmed [ProfileQuestionnaire](frontend/src/pages/portfolio-health/ProfileQuestionnaire.tsx).
+  - Health Review links here (`go('forecast', { view: 'profile' })`) rather than embedding a form.
 
 ## Cost basis & performance
 
@@ -215,7 +239,7 @@ Roadmap after the Oct 2026 product review (full write-up: `~/.claude/plans/i-wan
 
 1. ~~Needs attention~~: shipped (section above).
 2. ~~Slim Overview~~: shipped (see "Screen layout").
-3. **One household profile.** Income, spend and big expenses are duplicated across Assumptions and the Health questionnaire. Derive spend, cash and current allocation from data; store only what the data can't tell (target allocation, risk answers, planned big expenses). Cut the Portfolio Health Review down to a few plain checks, with no composite score. Its Stages 2–4 are frozen.
+3. ~~One household profile~~: shipped (section above). **Still to do: cut the Portfolio Health Review down** to a few plain checks, with no composite score. Its Stages 2–4 are frozen.
 4. **Goal-based forecast.** Amount + date → probability. Default horizon 5–10 years, with expert settings (ρ, σ, FX drift) behind "Advanced".
 
 Decided: **no per-person (mine / yours / shared) split.** The household is one pooled view.

@@ -9,6 +9,10 @@ Single-tenant: one household, no user scoping. The flow:
   GET  /portfolio-health/review/latest
   GET  /portfolio-health/reviews  -> history
 
+Money is not part of the questionnaire: monthly spending, liquid cash and
+planned big expenses come from the household profile and the data
+(services/household), the same figures the forecast uses.
+
 Guardrail: if no investor profile exists, the review endpoint returns a factual
 portfolio summary only (no scores, no suitability) and asks the user to complete
 the profile. The AI explanation layer + advanced diagnostics arrive in later
@@ -20,20 +24,21 @@ from datetime import UTC
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import (
+    Assumptions,
     InvestmentPolicyProfile,
     InvestorProfile,
     PortfolioFinding,
     PortfolioHealthReview,
     SecurityMetadata,
 )
-from ..services.fx.conversion import to_base_current
+from ..services.household import effective_monthly_spend, liquid_cash_clp, upcoming_expenses
 from ..services.networth.snapshot import current_networth
 from ..services.portfolio_health import AI_PROMPT_VERSION, RULES_ENGINE_VERSION, scoring
 from ..services.portfolio_health import classify as classify_mod
@@ -59,13 +64,6 @@ IncomeStability = Literal["stable", "variable", "self_employed", "unemployed", "
 Knowledge = Literal["beginner", "intermediate", "advanced"]
 
 
-class LargeExpense(BaseModel):
-    label: str = ""
-    amount: Decimal = Decimal("0")
-    currency: str = Field(default="CLP", min_length=3, max_length=3)
-    months_away: int = 0
-
-
 class Constraints(BaseModel):
     esg: bool = False
     max_crypto_pct: float | None = None
@@ -82,13 +80,6 @@ class ProfileIn(BaseModel):
     risk_tolerance: RiskScale
     risk_capacity: RiskScale
     loss_reaction: LossReaction
-    monthly_income: Decimal = Decimal("0")
-    monthly_income_currency: str = Field(default="CLP", min_length=3, max_length=3)
-    monthly_expenses: Decimal = Decimal("0")
-    monthly_expenses_currency: str = Field(default="CLP", min_length=3, max_length=3)
-    emergency_fund_amount: Decimal = Decimal("0")
-    emergency_fund_currency: str = Field(default="CLP", min_length=3, max_length=3)
-    expected_large_expenses: list[LargeExpense] = Field(default_factory=list)
     income_stability: IncomeStability
     investment_knowledge: Knowledge
     tax_residence: str = Field(default="", max_length=2)
@@ -107,13 +98,6 @@ def _profile_to_dict(p: InvestorProfile) -> dict:
         "risk_tolerance": p.risk_tolerance,
         "risk_capacity": p.risk_capacity,
         "loss_reaction": p.loss_reaction,
-        "monthly_income": str(p.monthly_income),
-        "monthly_income_currency": p.monthly_income_currency,
-        "monthly_expenses": str(p.monthly_expenses),
-        "monthly_expenses_currency": p.monthly_expenses_currency,
-        "emergency_fund_amount": str(p.emergency_fund_amount),
-        "emergency_fund_currency": p.emergency_fund_currency,
-        "expected_large_expenses": p.expected_large_expenses or [],
         "income_stability": p.income_stability,
         "investment_knowledge": p.investment_knowledge,
         "tax_residence": p.tax_residence,
@@ -143,7 +127,27 @@ def _policy_to_dict(pp: InvestmentPolicyProfile) -> dict:
     }
 
 
-def _profile_data(p: InvestorProfile) -> ProfileData:
+def _household(db: Session) -> Assumptions:
+    a = db.execute(select(Assumptions).limit(1)).scalar_one_or_none()
+    if a is None:
+        raise HTTPException(status_code=404, detail="No household profile row — seed the database.")
+    return a
+
+
+def _large_expenses(db: Session) -> list[dict]:
+    """Upcoming planned expenses from the household profile, in base CLP."""
+    return [
+        {"label": e["label"], "amount_clp": float(e["amount_clp"]), "months_away": e["months_away"]}
+        for e in upcoming_expenses(db, _household(db))
+    ]
+
+
+def _profile_data(db: Session, p: InvestorProfile) -> ProfileData:
+    # The policy only needs amount + timing to spot a near-term expense.
+    planned = [
+        {"label": e["label"], "amount": e["amount_clp"], "months_away": e["months_away"]}
+        for e in _large_expenses(db)
+    ]
     return ProfileData(
         primary_goal=p.primary_goal,
         time_horizon=p.time_horizon,
@@ -152,10 +156,7 @@ def _profile_data(p: InvestorProfile) -> ProfileData:
         loss_reaction=p.loss_reaction,
         income_stability=p.income_stability,
         investment_knowledge=p.investment_knowledge,
-        monthly_income=float(p.monthly_income or 0),
-        monthly_expenses=float(p.monthly_expenses or 0),
-        emergency_fund_amount=float(p.emergency_fund_amount or 0),
-        expected_large_expenses=p.expected_large_expenses or [],
+        expected_large_expenses=planned,
         constraints=p.constraints or {},
         base_currency=p.base_currency,
         tax_residence=p.tax_residence,
@@ -197,7 +198,7 @@ def _policy_row_matches(row: InvestmentPolicyProfile, pdata) -> bool:
 
 def _persist_policy(db: Session, profile: InvestorProfile) -> InvestmentPolicyProfile:
     """Derive the policy deterministically and persist a new versioned row."""
-    pdata = derive_policy(_profile_data(profile))
+    pdata = derive_policy(_profile_data(db, profile))
     prev = _latest_policy(db)
     version = (prev.version + 1) if prev else 1
     pp = InvestmentPolicyProfile(
@@ -302,13 +303,6 @@ def put_profile(payload: ProfileIn, db: Session = Depends(get_session)):
         risk_tolerance=payload.risk_tolerance,
         risk_capacity=payload.risk_capacity,
         loss_reaction=payload.loss_reaction,
-        monthly_income=payload.monthly_income,
-        monthly_income_currency=payload.monthly_income_currency.upper(),
-        monthly_expenses=payload.monthly_expenses,
-        monthly_expenses_currency=payload.monthly_expenses_currency.upper(),
-        emergency_fund_amount=payload.emergency_fund_amount,
-        emergency_fund_currency=payload.emergency_fund_currency.upper(),
-        expected_large_expenses=[e.model_dump(mode="json") for e in payload.expected_large_expenses],
         income_stability=payload.income_stability,
         investment_knowledge=payload.investment_knowledge,
         tax_residence=(payload.tax_residence or "").upper(),
@@ -340,7 +334,7 @@ def create_review(db: Session = Depends(get_session)):
         # Guardrail: no profile -> factual summary only, no suitability review.
         return _factual_summary(snapshot)
 
-    pdata = derive_policy(_profile_data(profile))
+    pdata = derive_policy(_profile_data(db, profile))
 
     policy_row = _latest_policy(db)
     if (
@@ -348,46 +342,23 @@ def create_review(db: Session = Depends(get_session)):
         or policy_row.investor_profile_id != profile.id
         or not _policy_row_matches(policy_row, pdata)
     ):
-        # No row, stale profile, or derive_policy changed since the row was
-        # written — persist a new version so engine input == displayed policy.
+        # No row, stale profile, or the derived policy changed since the row was
+        # written (e.g. a planned expense moved closer) — persist a new version
+        # so engine input == displayed policy.
         policy_row = _persist_policy(db, profile)
 
-    # Convert profile spending/liquidity amounts to base CLP so the engine stays
-    # pure. FX failures degrade to 0 (the engine then skips the affected
-    # diagnostics) but are reported in missing_data, never swallowed silently.
-    fx_failures: list[str] = []
-
-    def _to_clp(amount: Decimal | None, currency: str | None, label: str) -> float:
-        if not amount or amount <= Decimal("0"):
-            return 0.0
-        ccy = (currency or "CLP").upper()
-        try:
-            return float(to_base_current(db, amount, ccy))
-        except Exception:  # noqa: BLE001 — FX unavailable; graceful degrade
-            fx_failures.append(f"{label}: {ccy}->CLP conversion failed; treated as unavailable")
-            return 0.0
-
-    monthly_expenses_clp = _to_clp(
-        profile.monthly_expenses, profile.monthly_expenses_currency, "monthly_expenses"
-    )
-    emergency_fund_clp = _to_clp(
-        profile.emergency_fund_amount, profile.emergency_fund_currency, "emergency_fund"
-    )
-
-    large_expenses_clp: list[dict] = []
-    for item in profile.expected_large_expenses or []:
-        label = str(item.get("label", "")) or "large_expense"
-        try:
-            amt = Decimal(str(item.get("amount", 0)))
-            ccy = str(item.get("currency", "CLP")).upper()
-            amt_clp = _to_clp(amt, ccy, f"large_expense '{label}'")
-            large_expenses_clp.append({
-                "label": item.get("label", ""),
-                "amount_clp": amt_clp,
-                "months_away": float(item.get("months_away", 0)),
-            })
-        except Exception:  # noqa: BLE001
-            fx_failures.append(f"large_expense '{label}': unreadable amount; skipped")
+    # Spending, liquid cash and planned expenses come from the household
+    # profile and the data — the same figures the forecast uses.
+    data_notes: list[str] = []
+    spend = effective_monthly_spend(db, _household(db))
+    if spend.source == "none":
+        data_notes.append(
+            "monthly_spending: no statemented months and no override in the household profile; "
+            "emergency-fund checks skipped"
+        )
+    monthly_expenses_clp = float(spend.monthly_clp)
+    emergency_fund_clp = float(liquid_cash_clp(snapshot))
+    large_expenses_clp = _large_expenses(db)
 
     # --- Stage 4: enrich holding metadata and pass to engine ---
     tickers = [h["ticker"] for h in snapshot.get("holdings", []) if h.get("ticker")]
@@ -396,7 +367,7 @@ def create_review(db: Session = Depends(get_session)):
     metadata_map = {ticker: metadata_to_dict(row) for ticker, row in enriched_map.items()}
 
     result = run_review(
-        _profile_data(profile),
+        _profile_data(db, profile),
         pdata,
         snapshot,
         avg_monthly_expenses_clp=monthly_expenses_clp,
@@ -423,7 +394,7 @@ def create_review(db: Session = Depends(get_session)):
         overall_score=Decimal(str(sc["overall"])),
         sub_scores=sc["sub_scores"],
         diagnostics=diagnostics,
-        missing_data=result.missing_data + fx_failures,
+        missing_data=result.missing_data + data_notes,
         ai_explanation=None,
         rules_engine_version=RULES_ENGINE_VERSION,
         ai_prompt_version=None,
@@ -462,7 +433,7 @@ def create_review(db: Session = Depends(get_session)):
             }
             for f in result.findings
         ],
-        "missing_data": result.missing_data + fx_failures,
+        "missing_data": result.missing_data + data_notes,
     }
     explanation, prompt_ver = explain_review(review_for_ai, OllamaExplanationProvider())
     review.ai_explanation = explanation

@@ -310,8 +310,28 @@ export interface ForecastResult {
   terminal: { p10: number; p50: number; p90: number };
   target: number | null;
   prob_hit_target: number | null;
+  /** What the run used (base CLP), so the page can say where numbers came from. */
+  inputs: {
+    monthly_income: number;
+    monthly_spending: number;
+    spending_source: SpendingSource;
+    spending_months: number;
+    allocation: Record<string, number>;
+    planned_expenses: number;
+  };
 }
 
+export type SpendingSource = "override" | "derived" | "none";
+
+export interface PlannedExpense {
+  label: string;
+  amount: string;
+  currency: string;
+  /** "YYYY-MM" */
+  month: string;
+}
+
+/** The household profile (single row). Spending is derived unless overridden. */
 export interface Assumptions {
   income_user1: string;
   income_user1_currency: string;
@@ -319,11 +339,12 @@ export interface Assumptions {
   income_user2_currency: string;
   income_growth_rate: number;
   income_noise_sigma: number;
-  spending_baseline_monthly: string;
-  spending_baseline_currency: string;
+  /** null = use the average derived from statements. */
+  spending_override_monthly: string | null;
+  spending_override_currency: string;
   spending_growth_rate: number;
+  planned_expenses: PlannedExpense[];
   return_assumptions: Record<string, number>;
-  asset_allocation: Record<string, number>;
   horizon_years: number;
   correlation_rho: number;
   inflation_rate: number;
@@ -331,6 +352,19 @@ export interface Assumptions {
 }
 
 export type AssumptionsUpdate = Partial<Assumptions>;
+
+/** GET /assumptions/derived — what the data says (base CLP). */
+export interface AssumptionsDerived {
+  currency: "CLP";
+  spending: {
+    derived_monthly: string | null;
+    months: string[];
+    effective_monthly: string;
+    source: SpendingSource;
+  };
+  liquid_cash: string;
+  allocation: Record<string, number>;
+}
 
 export interface ForecastRequest {
   horizon_years?: number;
@@ -383,13 +417,6 @@ export interface InvestorProfile {
   risk_tolerance: string;
   risk_capacity: string;
   loss_reaction: string;
-  monthly_income: string;
-  monthly_income_currency: string;
-  monthly_expenses: string;
-  monthly_expenses_currency: string;
-  emergency_fund_amount: string;
-  emergency_fund_currency: string;
-  expected_large_expenses: { label: string; amount: number; currency: string; months_away: number }[];
   income_stability: string;
   investment_knowledge: string;
   tax_residence: string;
@@ -539,13 +566,6 @@ export interface ProfileInput {
   risk_tolerance: string;
   risk_capacity: string;
   loss_reaction: string;
-  monthly_income: string;
-  monthly_income_currency: string;
-  monthly_expenses: string;
-  monthly_expenses_currency: string;
-  emergency_fund_amount: string;
-  emergency_fund_currency?: string;
-  expected_large_expenses?: { label: string; amount: number; currency: string; months_away: number }[];
   income_stability: string;
   investment_knowledge: string;
   tax_residence: string;
@@ -724,6 +744,7 @@ export const api = {
 
   assumptions: {
     get: () => request<Assumptions>("/assumptions"),
+    derived: () => request<AssumptionsDerived>("/assumptions/derived"),
     update: (body: AssumptionsUpdate) =>
       request<Assumptions>("/assumptions", { method: "PUT", body: JSON.stringify(body) }),
   },

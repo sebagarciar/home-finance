@@ -27,6 +27,7 @@ export const queryKeys = {
   transactions: (params: TxnParams) => ['transactions', params] as const,
   forecast: (params: ForecastRequest) => ['forecast', params] as const,
   assumptions: () => ['assumptions'] as const,
+  assumptionsDerived: () => ['assumptions', 'derived'] as const,
   investorProfile: () => ['portfolioHealth', 'profile'] as const,
   portfolioReviewLatest: () => ['portfolioHealth', 'review', 'latest'] as const,
   portfolioReviews: () => ['portfolioHealth', 'reviews'] as const,
@@ -121,6 +122,10 @@ export function useTransactions(params: TxnParams) {
 
 export function useAssumptions() {
   return useQuery({ queryKey: queryKeys.assumptions(), queryFn: () => api.assumptions.get() })
+}
+
+export function useAssumptionsDerived() {
+  return useQuery({ queryKey: queryKeys.assumptionsDerived(), queryFn: () => api.assumptions.derived() })
 }
 
 // Forecast is a POST but behaves like a read (pure function of the run inputs),

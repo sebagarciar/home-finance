@@ -3,11 +3,12 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine,
 } from 'recharts'
-import type { ForecastBand } from '../api/client'
+import type { ForecastBand, ForecastResult } from '../api/client'
 import { useForecast } from '../api/hooks'
 import { useCurrency } from '../lib/currency'
 import { chart } from '../design/chartTheme'
-import { Assumptions } from './Assumptions'
+import { useNav } from '../lib/nav'
+import { Profile } from './Profile'
 
 const HORIZONS = [10, 20, 30, 40]
 const SEED = 42
@@ -17,31 +18,32 @@ const N_PATHS = 5000
 // median outward; cobalt accent is reserved for CTAs, never chart fills.
 const LINE = '#1b5fd9'
 
-type View = 'forecast' | 'assumptions'
+type View = 'forecast' | 'profile'
 
-// Wrapper: the forecast and its inputs (Assumptions) live behind one sidebar
-// entry, switched by an in-page sub-tab.
+// Wrapper: the forecast and its inputs (the household Profile) live behind one
+// nav entry, switched by an in-page sub-tab.
 export function Forecast() {
-  const [view, setView] = useState<View>('forecast')
+  const { intent } = useNav()
+  const [view, setView] = useState<View>(intent?.view === 'profile' ? 'profile' : 'forecast')
   return (
     <>
       <div className="subtabs">
-        {(['forecast', 'assumptions'] as const).map((v) => (
+        {(['forecast', 'profile'] as const).map((v) => (
           <button
             key={v}
             className={`subtab${view === v ? ' active' : ''}`}
             onClick={() => setView(v)}
           >
-            {v === 'forecast' ? 'Forecast' : 'Assumptions'}
+            {v === 'forecast' ? 'Forecast' : 'Profile'}
           </button>
         ))}
       </div>
-      {view === 'forecast' ? <ForecastView /> : <Assumptions />}
+      {view === 'forecast' ? <ForecastView onEditProfile={() => setView('profile')} /> : <Profile />}
     </>
   )
 }
 
-function ForecastView() {
+function ForecastView({ onEditProfile }: { onEditProfile: () => void }) {
   const { format, formatCompact, toDisplay } = useCurrency()
 
   const [horizon, setHorizon] = useState(30)
@@ -93,8 +95,8 @@ function ForecastView() {
       <div className="card">
         <h2 className="card-title">Forecast unavailable</h2>
         <div className="empty" style={{ marginTop: 12 }}>
-          Could not run the forecast. Make sure the backend is running and an
-          assumptions row is seeded.
+          Could not run the forecast. Make sure the backend is running and the
+          household profile row is seeded.
         </div>
       </div>
     )
@@ -115,6 +117,7 @@ function ForecastView() {
               with income and spending shocks. A range of what <em>could</em>{' '}
               happen — not a prediction.
             </div>
+            {result && <ForecastInputsLine inputs={result.inputs} format={format} onEdit={onEditProfile} />}
           </div>
         </div>
 
@@ -246,9 +249,9 @@ function ForecastView() {
         )}
 
         <div className="card-meta" style={{ marginTop: 14 }}>
-          Bands widen with time because uncertainty compounds. Inputs (salaries,
-          growth, allocation, ρ, inflation) come from your assumptions — editing
-          them lands in a later phase. {result?.real ? 'Values are in today\'s money.' : 'Values are nominal (not inflation-adjusted).'}
+          Bands widen with time because uncertainty compounds. Spending and the asset mix
+          come from your data; income, planned expenses and settings from your Profile.{' '}
+          {result?.real ? 'Values are in today\'s money.' : 'Values are nominal (not inflation-adjusted).'}
         </div>
       </div>
     </>
@@ -260,6 +263,30 @@ interface FanTooltipProps {
   label?: number | string
   payload?: { payload: { raw: ForecastBand } }[]
   format: (n: number) => string
+}
+
+// One line saying where the forecast's inputs came from, with a way to change them.
+function ForecastInputsLine({
+  inputs, format, onEdit,
+}: { inputs: ForecastResult['inputs']; format: (n: number) => string; onEdit: () => void }) {
+  const spend =
+    inputs.spending_source === 'override'
+      ? `${format(inputs.monthly_spending)}/mo spending (your override)`
+      : inputs.spending_source === 'derived'
+        ? `${format(inputs.monthly_spending)}/mo spending (avg of ${inputs.spending_months} months)`
+        : 'no spending data'
+  const mix = ['equity', 'bonds', 'cash']
+    .map((k) => `${Math.round((inputs.allocation[k] ?? 0) * 100)}% ${k}`)
+    .join(' · ')
+  const planned = inputs.planned_expenses
+    ? ` · ${inputs.planned_expenses} planned ${inputs.planned_expenses === 1 ? 'expense' : 'expenses'}`
+    : ''
+  return (
+    <div className="forecast-inputs">
+      Using {format(inputs.monthly_income)}/mo income · {spend} · {mix}{planned}.{' '}
+      <button className="link-btn" onClick={onEdit}>Edit profile</button>
+    </div>
+  )
 }
 
 function FanTooltip({ active, payload, label, format }: FanTooltipProps) {

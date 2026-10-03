@@ -24,9 +24,8 @@ class ProfileData:
     loss_reaction: str
     income_stability: str
     investment_knowledge: str
-    monthly_income: float
-    monthly_expenses: float
-    emergency_fund_amount: float
+    # Upcoming planned expenses ({label, amount, months_away}) from the
+    # household profile; money is no longer part of the questionnaire.
     expected_large_expenses: list[dict] = field(default_factory=list)
     constraints: dict = field(default_factory=dict)
     base_currency: str = "CLP"

@@ -18,8 +18,9 @@ from sqlalchemy.pool import StaticPool
 from app.auth import get_current_user
 from app.db import Base, get_session
 from app.main import app
-from app.models import Account, Holding
+from app.models import Account, Assumptions, Holding, Transaction
 from app.models.accounts import AccountType
+from app.seeds.defaults import seed
 from app.services.portfolio_health import scoring
 from app.services.portfolio_health.engine import run_review
 from app.services.portfolio_health.policy import ProfileData, derive_policy
@@ -38,9 +39,6 @@ def make_profile(**overrides) -> ProfileData:
         "loss_reaction": "hold_uncomfortable",
         "income_stability": "stable",
         "investment_knowledge": "intermediate",
-        "monthly_income": 3000.0,
-        "monthly_expenses": 2000.0,
-        "emergency_fund_amount": 10000.0,
         "expected_large_expenses": [],
         "constraints": {},
         "base_currency": "CLP",
@@ -274,6 +272,8 @@ def client():
     )
     Base.metadata.create_all(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    with TestingSession() as s:
+        seed(s)  # the household profile row the review reads
 
     def override_session():
         s = TestingSession()
@@ -294,11 +294,6 @@ _PROFILE_PAYLOAD = {
     "risk_tolerance": "moderate",
     "risk_capacity": "moderate",
     "loss_reaction": "hold_uncomfortable",
-    "monthly_income": "3000",
-    "monthly_income_currency": "CLP",
-    "monthly_expenses": "2000",
-    "monthly_expenses_currency": "CLP",
-    "emergency_fund_amount": "10000",
     "income_stability": "stable",
     "investment_knowledge": "intermediate",
     "tax_residence": "CL",
@@ -371,10 +366,7 @@ def test_put_profile_then_review(client, monkeypatch):
     assert len(hist) == 1
 
 
-def test_review_reports_fx_failure_in_missing_data(client, monkeypatch):
-    """An unconvertible profile amount degrades to 0 but must surface in
-    missing_data instead of silently changing the liquidity diagnostics."""
-    cl, session_factory = client
+def _offline_prices(monkeypatch):
     from app.services.prices import valuation as valuation_mod
     from app.services.prices.provider import PriceLookupError
 
@@ -383,24 +375,60 @@ def test_review_reports_fx_failure_in_missing_data(client, monkeypatch):
             raise PriceLookupError(f"offline: {ticker}")
 
     monkeypatch.setattr(valuation_mod, "get_provider", lambda: _DeadProvider())
+
+
+def test_review_notes_missing_spending(client, monkeypatch):
+    """No statemented months and no override: the liquidity check is skipped
+    and the reason surfaces in missing_data."""
+    cl, session_factory = client
+    _offline_prices(monkeypatch)
     _seed_clp_portfolio(session_factory)
-
-    payload = {**_PROFILE_PAYLOAD, "monthly_expenses_currency": "EUR"}
-    assert cl.put("/portfolio-health/profile", json=payload).status_code == 200
-
-    import app.routers.portfolio_health as ph_router
-
-    def _fx_down(db, amount, currency, provider=None):
-        if currency == "CLP":
-            return Decimal(str(amount))
-        raise LookupError(f"no rate for {currency}")
-
-    monkeypatch.setattr(ph_router, "to_base_current", _fx_down)
+    assert cl.put("/portfolio-health/profile", json=_PROFILE_PAYLOAD).status_code == 200
 
     review = cl.post("/portfolio-health/review").json()
-    assert any("monthly_expenses" in note for note in review["missing_data"])
-    # The engine saw 0 expenses -> liquidity diagnostics marked unavailable.
+    assert any("monthly_spending" in note for note in review["missing_data"])
     assert review["diagnostics"]["liquidity"]["data_available"] is False
+
+
+def test_review_uses_household_figures(client, monkeypatch):
+    """Spending comes from statements (complete months only), the emergency fund
+    is the real cash balance, and a near-term planned expense from the household
+    profile raises the liquidity target — no money in the questionnaire."""
+    from datetime import date, timedelta
+
+    cl, session_factory = client
+    _offline_prices(monkeypatch)
+    _seed_clp_portfolio(session_factory)
+    s = session_factory()
+    acc = s.query(Account).filter_by(name="Cash").one()
+    first = date.today().replace(day=1)
+    prev = (first - timedelta(days=1)).replace(day=10)
+    prev2 = (prev.replace(day=1) - timedelta(days=1)).replace(day=10)
+    for i, (d, amt) in enumerate([(prev, "-100000"), (prev2, "-300000"), (first, "-999999")]):
+        s.add(Transaction(account_id=acc.id, date=d, amount=Decimal(amt), currency="CLP",
+                          fx_rate_to_base=Decimal("1"), category="Supermarket",
+                          raw_description="x", normalized_description="x", dedup_hash=f"hh{i}"))
+    soon = (first + timedelta(days=95)).strftime("%Y-%m")
+    s.query(Assumptions).one().planned_expenses = [
+        {"label": "car", "amount": "2000000", "currency": "CLP", "month": soon},
+    ]
+    s.commit()
+    s.close()
+
+    assert cl.put("/portfolio-health/profile", json=_PROFILE_PAYLOAD).status_code == 200
+    review = cl.post("/portfolio-health/review").json()
+    liq = review["diagnostics"]["liquidity"]
+    # Average of the two complete months; the running month is ignored.
+    assert Decimal(liq["monthly_expenses_clp"]) == Decimal("200000")
+    assert Decimal(liq["emergency_fund_declared_clp"]) == Decimal("500000")
+    # Base target + the near-term-expense bump (stable income adds nothing).
+    from app.services.portfolio_health import config as C
+
+    policy = review["diagnostics"]["policy"]
+    assert policy["emergency_fund_target_months"] == (
+        C.EMERGENCY_FUND_BASE_MONTHS + C.EMERGENCY_FUND_LARGE_EXPENSE_BUMP
+    )
+    assert not any("monthly_spending" in n for n in review["missing_data"])
 
 
 def test_review_repersists_policy_when_derivation_drifts(client, monkeypatch):

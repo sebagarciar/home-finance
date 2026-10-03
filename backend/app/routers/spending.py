@@ -29,24 +29,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
-from ..models import Category, Transaction
+from ..models import Transaction
+from ..services.spending import income_categories as _income_categories
+from ..services.spending import spend_base as _signed_base
 from ._validation import validate_date_range
 
 router = APIRouter(prefix="/spending", tags=["spending"])
-
-
-def _income_categories(db: Session) -> set[str]:
-    """Categories whose positive inflows count as income (and are excluded from
-    the spending series). Driven by Category.is_income — not hardcoded names —
-    so renaming a category can't silently break the split. Everything else
-    stays in spending, even if it nets negative."""
-    return set(db.execute(select(Category.name).where(Category.is_income.is_(True))).scalars().all())
-
-
-def _signed_base(t: Transaction) -> Decimal:
-    """Spend-positive CLP value: outflows positive, inflows negative."""
-    amt = Decimal(str(t.amount)) * Decimal(str(t.fx_rate_to_base))
-    return -amt
 
 
 def _query(db: Session, start, end, account_id) -> list[Transaction]:

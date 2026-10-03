@@ -1,8 +1,9 @@
 """Monte Carlo forecast endpoint.
 
-POST /forecast/run — runs the simulation off the seeded `assumptions` row, with a
-few inline run controls (horizon, real/nominal, target, life events). Full
-assumptions editing is Phase 7; this router reads, it does not mutate.
+POST /forecast/run — runs the simulation off the household profile (the
+`assumptions` row) plus derived figures (current mix, average spend), with a few
+inline run controls (horizon, real/nominal, target, extra life events). This
+router reads; the profile is edited via /assumptions.
 
 Output is base currency (CLP); the EUR display toggle is applied client-side.
 """
@@ -52,6 +53,15 @@ class Terminal(BaseModel):
     p90: float
 
 
+class ForecastInputs(BaseModel):
+    monthly_income: float
+    monthly_spending: float
+    spending_source: str  # override | derived | none
+    spending_months: int
+    allocation: dict[str, float]
+    planned_expenses: int
+
+
 class ForecastResponse(BaseModel):
     currency: str
     real: bool
@@ -62,6 +72,7 @@ class ForecastResponse(BaseModel):
     terminal: Terminal
     target: float | None
     prob_hit_target: float | None
+    inputs: ForecastInputs
 
 
 @router.post("/run", response_model=ForecastResponse)

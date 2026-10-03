@@ -5,19 +5,21 @@ Everything is in base currency (CLP); the EUR display toggle is applied later at
 render time, never here.
 
 Model, per the build spec:
-- **Start** from the latest net-worth snapshot (else the live computation).
-- **Income**: both salaries -> base, monthly, with deterministic growth and a
-  per-month lognormal noise (σ = `income_noise_sigma`).
-- **Spending**: baseline -> base, with deterministic growth/inflation.
+- **Start** from today's live net worth (balances + holdings at current prices).
+- **Income**: the household profile's income lines -> base, monthly, with
+  deterministic growth and a per-month lognormal noise (σ = `income_noise_sigma`).
+- **Spending**: the profile's override if set, else the average derived from
+  statements (services/household), with deterministic growth.
 - **Returns**: historical block bootstrap of `equity`/`bonds` proxies (cash is
-  deterministic). Falls back to a parametric Normal model when history can't be
+  deterministic), weighted by the *current* asset mix from net worth. Falls back to a parametric Normal model when history can't be
   fetched, and a zero-vol `deterministic` mode exists for tests/offline.
 - **Correlated shocks (ρ)**: in bottom-decile market months, income is scaled
   down and spending up by `ρ × shock magnitude`.
 - **Real terms by default** (deflate by inflation); nominal via the toggle.
 - **FX scenario**: flat by default; an annual CLP drift can be applied to the
   foreign-currency income streams (never bundled into returns).
-- **Life events**: optional dated lump sums.
+- **Life events**: the profile's planned expenses as dated outflows, plus any
+  per-run lump sums.
 
 Outputs P10/P25/P50/P75/P90 net-worth bands across the horizon plus the
 probability of finishing at or above an editable target.
@@ -32,8 +34,9 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import Assumptions, NetworthSnapshot
+from ...models import Assumptions
 from ..fx.conversion import to_base_current
+from ..household import current_allocation, effective_monthly_spend, upcoming_expenses
 from ..networth import current_networth
 from .blocks import (
     ASSET_PROXIES,
@@ -60,17 +63,9 @@ def _add_months(d: date, months: int) -> date:
     return date(year, month + 1, min(d.day, 28))
 
 
-def _start_networth(db: Session) -> Decimal:
-    latest = db.execute(
-        select(NetworthSnapshot).order_by(NetworthSnapshot.date.desc()).limit(1)
-    ).scalar_one_or_none()
-    if latest is not None:
-        return Decimal(str(latest.total_networth_in_base))
-    return Decimal(current_networth(db)["total_in_base"])
-
-
 def _portfolio_returns(
-    a: Assumptions,
+    allocation: dict[str, float],
+    expected: dict[str, float],
     n_paths: int,
     n_months: int,
     rng: np.random.Generator,
@@ -78,10 +73,9 @@ def _portfolio_returns(
 ) -> np.ndarray:
     """Return `[n_paths, n_months]` portfolio monthly returns, allocation-weighted
     across asset classes. `returns_mode` ∈ auto|bootstrap|parametric|deterministic."""
-    allocation: dict[str, float] = {k: float(v) for k, v in a.asset_allocation.items()}
+    allocation = {k: v for k, v in allocation.items() if v > 0}
     total_alloc = sum(allocation.values()) or 1.0
     weights = {k: v / total_alloc for k, v in allocation.items()}
-    expected: dict[str, float] = {k: float(v) for k, v in a.return_assumptions.items()}
 
     # Asset classes that have a historical proxy and can be bootstrapped.
     boot_classes = [c for c in weights if c in ASSET_PROXIES]
@@ -131,8 +125,13 @@ def run_forecast(
     n_paths: int = 10000,
     seed: int | None = None,
     returns_mode: str = "auto",
+    allocation: dict[str, float] | None = None,
 ) -> dict:
-    """Run the Monte Carlo forecast and return a JSON-ready band/summary dict."""
+    """Run the Monte Carlo forecast and return a JSON-ready band/summary dict.
+
+    `allocation` overrides the current mix (tests, what-ifs); by default the
+    weights come from today's net worth.
+    """
     overrides = overrides or {}
     a = db.execute(select(Assumptions).limit(1)).scalar_one_or_none()
     if a is None:
@@ -146,14 +145,17 @@ def run_forecast(
 
     rng = np.random.default_rng(seed)
 
-    start_nw = float(_start_networth(db))
+    networth = current_networth(db)
+    start_nw = float(networth["total_in_base"])
+    weights = allocation if allocation is not None else current_allocation(networth)
+    spend = effective_monthly_spend(db, a)
 
     # --- Income (base, monthly) -------------------------------------------------
     income_base = float(
         to_base_current(db, a.income_user1, a.income_user1_currency)
         + to_base_current(db, a.income_user2, a.income_user2_currency)
     )
-    spending_base = float(to_base_current(db, a.spending_baseline_monthly, a.spending_baseline_currency))
+    spending_base = float(spend.monthly_clp)
 
     g_income = (1.0 + float(a.income_growth_rate)) ** (1 / 12)
     g_spending = (1.0 + float(a.spending_growth_rate)) ** (1 / 12)
@@ -187,7 +189,8 @@ def run_forecast(
     spending = np.broadcast_to(spending_trend[None, :], (n_paths, n_months)).copy()
 
     # --- Returns + correlated shocks -------------------------------------------
-    port = _portfolio_returns(a, n_paths, n_months, rng, returns_mode)
+    expected = {k: float(v) for k, v in a.return_assumptions.items()}
+    port = _portfolio_returns(weights, expected, n_paths, n_months, rng, returns_mode)
     if rho > 0:
         q10 = np.quantile(port, 0.10)
         if q10 < 0:
@@ -198,7 +201,12 @@ def run_forecast(
             spending = spending * (1.0 + scale)
 
     # --- Life events (dated lump sums) -----------------------------------------
+    # Planned expenses land in the step that covers their month (this month = 0).
     life_flows = np.zeros(n_months, dtype=float)
+    planned = upcoming_expenses(db, a)
+    for ev in planned:
+        if ev["months_away"] < n_months:
+            life_flows[ev["months_away"]] -= float(ev["amount_clp"])
     for ev in overrides.get("life_events", []) or []:
         m = int(ev["month"])
         if 1 <= m <= n_months:
@@ -253,4 +261,13 @@ def run_forecast(
         },
         "target": float(target_dec) if target_dec is not None else None,
         "prob_hit_target": prob_hit_target,
+        # What the run used, so the UI can say where the numbers came from.
+        "inputs": {
+            "monthly_income": round(income_base, 2),
+            "monthly_spending": round(spending_base, 2),
+            "spending_source": spend.source,
+            "spending_months": len(spend.derived.months),
+            "allocation": {k: round(float(v), 4) for k, v in weights.items()},
+            "planned_expenses": len(planned),
+        },
     }

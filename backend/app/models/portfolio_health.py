@@ -36,7 +36,7 @@ from ..db import Base
 
 
 class InvestorProfile(Base):
-    """User questionnaire answers. History-preserving: latest row is active."""
+    """Risk & goal answers. History-preserving: latest row is active."""
 
     __tablename__ = "investor_profiles"
 
@@ -48,15 +48,8 @@ class InvestorProfile(Base):
     risk_capacity: Mapped[str] = mapped_column(String(16), nullable=False)
     loss_reaction: Mapped[str] = mapped_column(String(24), nullable=False)
 
-    monthly_income: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
-    monthly_income_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CLP")
-    monthly_expenses: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
-    monthly_expenses_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CLP")
-    emergency_fund_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
-    emergency_fund_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CLP")
-
-    # List of {label, amount, currency, months_away}
-    expected_large_expenses: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Money (income, spending, emergency fund, planned expenses) is not asked
+    # here: it lives in the household profile or is derived from data.
 
     income_stability: Mapped[str] = mapped_column(String(16), nullable=False)
     investment_knowledge: Mapped[str] = mapped_column(String(12), nullable=False)

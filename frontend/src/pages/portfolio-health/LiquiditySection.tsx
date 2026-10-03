@@ -22,12 +22,12 @@ export function LiquiditySection({ liq, format }: { liq: LiquidityDiagnostics; f
       <div className="card-header">
         <h2 className="card-title">Liquidity &amp; emergency fund</h2>
         {!liq.data_available && (
-          <span className="phr-sev sev-low">add monthly expenses to profile for full analysis</span>
+          <span className="phr-sev sev-low">needs monthly spending</span>
         )}
       </div>
       <div className="networth-tiles">
         <div className="networth-tile">
-          <div className="tile-label">Cash available</div>
+          <div className="tile-label">Liquid cash</div>
           <div className="tile-value num">{format(cashNum)}</div>
         </div>
         {liq.data_available && (
@@ -67,7 +67,7 @@ export function LiquiditySection({ liq, format }: { liq: LiquidityDiagnostics; f
       </div>
       {!liq.data_available && (
         <div className="card-meta" style={{ marginTop: 8 }}>
-          Add your monthly expenses to the investor profile to enable the emergency-fund analysis.
+          No monthly spending yet: import a statement, or set a spending override in Forecast → Profile.
         </div>
       )}
     </div>
