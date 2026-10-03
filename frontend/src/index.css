@@ -718,10 +718,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (max-width: 1100px) {
   .add-holding { grid-template-columns: 1fr 1fr; }
   .add-holding .form-error { grid-column: 1 / -1; }
+  /* Keep ticker, value and actions; drop account, quantity, price. */
   .holdings-head, .holdings-row {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr max-content;
   }
-  .holdings-head > :nth-child(n+4), .holdings-row > :nth-child(n+4) { display: none; }
+  .holdings-head > :nth-child(n+2):nth-child(-n+4),
+  .holdings-row > :nth-child(n+2):nth-child(-n+4) { display: none; }
 }
 
 .balances-table { display: flex; flex-direction: column; margin-top: 8px; }
@@ -747,8 +749,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .balances-row:last-child { border-bottom: none; }
 .balances-row:hover { background: var(--surface-raised); border-radius: var(--radius-md); }
 @media (max-width: 900px) {
-  .balances-head, .balances-row { grid-template-columns: 1fr 1fr 1fr; }
-  .balances-head > :nth-child(n+4), .balances-row > :nth-child(n+4) { display: none; }
+  /* Keep account, total and actions; drop type, cash, holdings. */
+  .balances-head, .balances-row { grid-template-columns: 1fr 1fr max-content; }
+  .balances-head > :nth-child(n+2):nth-child(-n+4),
+  .balances-row > :nth-child(n+2):nth-child(-n+4) { display: none; }
 }
 
 /* ── Import preview table ──────────────────────────────────── */
