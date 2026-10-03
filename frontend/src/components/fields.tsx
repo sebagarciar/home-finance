@@ -1,6 +1,6 @@
-import { CURRENCIES } from './constants'
+import { CURRENCIES } from '../lib/options'
 
-// Shared form components used by the questionnaire.
+// Shared form building blocks for the Profile page.
 
 export function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -22,7 +22,7 @@ export function SelectField({
   return (
     <label className="field">
       <span className="field-label">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="phr-select">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="field-select">
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </label>

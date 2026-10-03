@@ -409,168 +409,57 @@ export interface FintualFund {
   currency: string;
 }
 
-// ---- Portfolio Health Review ----
-export interface InvestorProfile {
+// ---- Portfolio checks ----
+export type Horizon = "lt_1y" | "1_3y" | "3_7y" | "7_15y" | "gt_15y";
+export type RiskScale = "low" | "moderate" | "high" | "very_high";
+export type LossReaction = "sell_after_10" | "hold_uncomfortable" | "invest_more" | "unsure";
+
+/** Risk answers that set the target mix (latest version is active). */
+export interface RiskProfile {
   id: number;
-  primary_goal: string;
-  time_horizon: string;
-  risk_tolerance: string;
-  risk_capacity: string;
-  loss_reaction: string;
-  income_stability: string;
-  investment_knowledge: string;
-  tax_residence: string;
-  base_currency: string;
-  constraints: Record<string, unknown>;
+  time_horizon: Horizon;
+  risk_tolerance: RiskScale;
+  risk_capacity: RiskScale;
+  loss_reaction: LossReaction;
   created_at: string | null;
-  updated_at: string | null;
 }
 
-export interface InvestmentPolicyProfile {
-  id: number;
-  investor_profile_id: number;
+export type RiskProfileInput = Omit<RiskProfile, "id" | "created_at">;
+
+export interface TargetPolicy {
   risk_profile: "conservative" | "moderate" | "growth" | "aggressive";
   target_allocation: Record<string, number>;
   allocation_ranges: Record<string, [number, number]>;
-  max_single_holding_pct: number;
-  max_sector_pct: number;
-  max_country_pct: number;
-  max_currency_pct: number;
-  max_crypto_pct: number;
-  max_employer_stock_pct: number;
-  emergency_fund_target_months: number;
-  rebalance_threshold_pct: number;
-  version: number;
+  /** Rules that shaped the target: tolerance_capacity_conflict | horizon_cap | loss_reaction_cap. */
+  notes: { code: string; [k: string]: unknown }[];
 }
 
-export interface PortfolioFinding {
-  id?: number;
-  category: string;
-  severity: "low" | "medium" | "high";
-  finding: string;
-  evidence: Record<string, unknown>;
-  whyItMatters: string;
-  educationalGuidance: string;
-  prohibitedSpecificAdvice: boolean;
-}
-
-export interface StressScenario {
-  scenario: string;
+export interface MixBucket {
+  bucket: string;
   label: string;
-  assumption: string;
-  approx_impact_pct: number;
-  approx_impact_base: string;
+  value: string;
+  current_pct: number;
+  /** null for "unclassified" holdings (no target). */
+  target_pct: number | null;
+  min_pct: number | null;
+  max_pct: number | null;
+  status: "below" | "in" | "above" | null;
+  drift_pp: number | null;
+  /** In range, but more than the rebalance threshold from the target midpoint. */
+  drifting: boolean;
 }
 
-export interface LiquidityDiagnostics {
-  cash_clp: string;
-  monthly_expenses_clp: string;
-  emergency_fund_declared_clp: string;
-  ef_months_current: number | null;
-  ef_months_target: number;
-  near_term_large_expenses_clp: string;
-  cash_gap_clp: string;
-  data_available: boolean;
-}
-
-export interface SecurityMetadata {
-  ticker: string;
-  asset_class: string | null;
-  sector: string | null;
-  region: string | null;
-  country: string | null;
-  currency: string | null;
-  product_type: string | null;
-  expense_ratio: number | null;
-  diversified_fund: boolean | null;
-  liquidity_level: string | null;
-  source: "auto" | "manual";
-  updated_at: string | null;
-}
-
-export type SecurityMetadataInput = Partial<Omit<SecurityMetadata, "ticker" | "source" | "updated_at">>;
-
-export interface PortfolioDiagnostics {
-  allocation: {
-    portfolio_value_in_base: string;
-    current_pct: Record<string, number>;
-    current_value_in_base: Record<string, string>;
-    target_ranges: Record<string, [number, number]>;
-    out_of_range: { bucket: string; current_pct: number; range: [number, number]; direction: "above" | "below" }[];
-  };
-  concentration: {
-    top1_pct: number;
-    top3_pct: number;
-    top5_pct: number;
-    largest_holding: { ticker: string; pct: number; value_in_base: string; bucket: string } | null;
-    largest_single_stock: { ticker: string; pct: number } | null;
-    crypto_pct: number;
-    employer_stock_ticker: string | null;
-    employer_stock_pct: number;
-    holdings: { ticker: string; pct: number; value_in_base: string; bucket: string; is_single_stock: boolean }[];
-  };
-  liquidity: LiquidityDiagnostics;
-  stress: StressScenario[];
-  risk: Record<string, number>;
-  sector: { by_sector_pct: Record<string, number>; max_sector_pct: number } | null;
-  geography: { by_country_pct: Record<string, number>; max_country_pct: number } | null;
-  currency_exposure: { by_currency_pct: Record<string, number>; max_currency_pct: number } | null;
-  fees: {
-    weighted_expense_ratio: number | null;
-    fee_coverage_pct: number | null;
-    holdings_with_fee_data: number;
-    holdings_missing_fee_data: number;
-    fee_warn_threshold: number;
-    fee_high_threshold: number;
+/** GET /portfolio/checks — all null until risk answers exist. */
+export interface PortfolioChecks {
+  profile: RiskProfile | null;
+  policy: TargetPolicy | null;
+  mix: {
+    currency: "CLP";
+    total: string;
+    out_of_range: number;
+    drifting: number;
+    buckets: MixBucket[];
   } | null;
-  data_quality: { unknown_count: number; missing_price_count: number; unknown_value_fraction: number; holdings_total: number };
-  status: string;
-  weights: Record<string, number>;
-  score_explanation: Record<string, { finding_id: string; severity?: string; penalty?: number; cap?: number }[]>;
-  policy: InvestmentPolicyProfile;
-  flags: Record<string, boolean>;
-}
-
-export interface PortfolioReview {
-  id: number;
-  created_at: string | null;
-  overall_score: number;
-  sub_scores: Record<string, number>;
-  diagnostics: PortfolioDiagnostics;
-  missing_data: string[];
-  ai_explanation: Record<string, unknown> | null;
-  rules_engine_version: string;
-  ai_prompt_version: string | null;
-  investor_profile_id: number;
-  investment_policy_profile_id: number;
-  findings: PortfolioFinding[];
-  profile_incomplete: false;
-}
-
-export interface FactualSummary {
-  profile_incomplete: true;
-  factual_summary: {
-    portfolio_value_in_base: string;
-    allocation_pct: Record<string, number>;
-    bucket_labels: Record<string, string>;
-    top_holdings: { ticker: string; pct: number; value_in_base: string; bucket: string }[];
-    by_currency: NetworthCurrencyRow[];
-  };
-}
-
-export type ReviewResponse = PortfolioReview | FactualSummary;
-
-export interface ProfileInput {
-  primary_goal: string;
-  time_horizon: string;
-  risk_tolerance: string;
-  risk_capacity: string;
-  loss_reaction: string;
-  income_stability: string;
-  investment_knowledge: string;
-  tax_residence: string;
-  base_currency: string;
-  constraints: Record<string, unknown>;
 }
 
 function qs(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -754,31 +643,14 @@ export const api = {
       request<{ results: FintualFund[] }>(`/prices/fintual/search${qs({ q })}`),
   },
 
-  portfolioHealth: {
-    getProfile: () => request<{ profile: InvestorProfile | null }>("/portfolio-health/profile"),
-    putProfile: (body: ProfileInput) =>
-      request<{ profile: InvestorProfile; policy: InvestmentPolicyProfile }>(
-        "/portfolio-health/profile",
-        { method: "PUT", body: JSON.stringify(body) },
-      ),
-    getPolicy: () => request<{ policy: InvestmentPolicyProfile | null }>("/portfolio-health/policy"),
-    runReview: () =>
-      request<ReviewResponse>("/portfolio-health/review", { method: "POST" }),
-    latestReview: () => request<{ review: PortfolioReview | null }>("/portfolio-health/review/latest"),
-    reviews: () =>
-      request<{ id: number; created_at: string | null; overall_score: number; status: string | null;
-        rules_engine_version: string; ai_prompt_version: string | null }[]>("/portfolio-health/reviews"),
-    listMetadata: () => request<SecurityMetadata[]>("/portfolio-health/metadata"),
-    getMetadata: (ticker: string) => request<SecurityMetadata>(`/portfolio-health/metadata/${ticker}`),
-    putMetadata: (ticker: string, body: SecurityMetadataInput) =>
-      request<SecurityMetadata>(`/portfolio-health/metadata/${ticker}`, {
+  portfolio: {
+    riskProfile: () => request<{ profile: RiskProfile | null }>("/portfolio/risk-profile"),
+    putRiskProfile: (body: RiskProfileInput) =>
+      request<{ profile: RiskProfile; policy: TargetPolicy }>("/portfolio/risk-profile", {
         method: "PUT",
         body: JSON.stringify(body),
       }),
-    deleteMetadata: (ticker: string) =>
-      request<{ deleted: string }>(`/portfolio-health/metadata/${ticker}`, { method: "DELETE" }),
-    triggerEnrich: () =>
-      request<SecurityMetadata[]>("/portfolio-health/enrich", { method: "POST" }),
+    checks: () => request<PortfolioChecks>("/portfolio/checks"),
   },
 
   import: {

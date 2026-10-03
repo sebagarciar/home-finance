@@ -28,10 +28,8 @@ export const queryKeys = {
   forecast: (params: ForecastRequest) => ['forecast', params] as const,
   assumptions: () => ['assumptions'] as const,
   assumptionsDerived: () => ['assumptions', 'derived'] as const,
-  investorProfile: () => ['portfolioHealth', 'profile'] as const,
-  portfolioReviewLatest: () => ['portfolioHealth', 'review', 'latest'] as const,
-  portfolioReviews: () => ['portfolioHealth', 'reviews'] as const,
-  securityMetadata: () => ['portfolioHealth', 'metadata'] as const,
+  riskProfile: () => ['portfolio', 'riskProfile'] as const,
+  portfolioChecks: () => ['portfolio', 'checks'] as const,
 }
 
 interface SpendingParams {
@@ -139,33 +137,13 @@ export function useForecast(params: ForecastRequest) {
   })
 }
 
-// ---- Portfolio Health Review ----
-export function useInvestorProfile() {
-  return useQuery({
-    queryKey: queryKeys.investorProfile(),
-    queryFn: () => api.portfolioHealth.getProfile(),
-  })
+// ---- Portfolio checks ----
+export function useRiskProfile() {
+  return useQuery({ queryKey: queryKeys.riskProfile(), queryFn: () => api.portfolio.riskProfile() })
 }
 
-export function usePortfolioReviewLatest() {
-  return useQuery({
-    queryKey: queryKeys.portfolioReviewLatest(),
-    queryFn: () => api.portfolioHealth.latestReview(),
-  })
-}
-
-export function usePortfolioReviews() {
-  return useQuery({
-    queryKey: queryKeys.portfolioReviews(),
-    queryFn: () => api.portfolioHealth.reviews(),
-  })
-}
-
-export function useSecurityMetadata() {
-  return useQuery({
-    queryKey: queryKeys.securityMetadata(),
-    queryFn: () => api.portfolioHealth.listMetadata(),
-  })
+export function usePortfolioChecks() {
+  return useQuery({ queryKey: queryKeys.portfolioChecks(), queryFn: () => api.portfolio.checks() })
 }
 
 // Re-exported for callers wiring mutations.

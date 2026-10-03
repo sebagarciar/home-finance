@@ -568,6 +568,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   transition: color 120ms, border-color 120ms;
 }
 .subtab:hover { color: var(--text-secondary); }
+@media (max-width: 720px) { .subtab { padding: 10px 14px; font-size: 15px; } }
 .subtab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -638,12 +639,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   color: var(--text-muted);
   white-space: nowrap;
   min-width: 36px;
-}
-.bucket-row {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
-  align-items: center;
-  gap: 12px;
 }
 
 /* ── Portfolio / Net worth ─────────────────────────────────── */
@@ -753,6 +748,33 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .tag-warn { background: var(--negative-bg); color: var(--negative-text); }
 
 button.tag { cursor: pointer; border: none; }
+
+/* ── Mix vs target (Portfolio) ─────────────────────────────── */
+.mix-rows { display: flex; flex-direction: column; gap: 14px; }
+.mix-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 220px;
+  gap: 16px;
+  align-items: center;
+}
+.mix-label { display: flex; flex-direction: column; font-size: 14px; font-weight: 500; }
+.mix-label .muted { font-size: 12px; font-weight: 400; }
+.mix-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+.mix-range { position: absolute; top: 0; bottom: 0; background: var(--accent-bg); }
+.mix-fill { position: absolute; left: 0; top: 3px; bottom: 3px; border-radius: 999px; opacity: 0.85; }
+.mix-target { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text-faint); z-index: 1; }
+.mix-figures { display: flex; flex-direction: column; font-size: 13px; }
+.mix-figures .muted { font-size: 12px; }
+@media (max-width: 720px) {
+  .mix-row { grid-template-columns: 1fr 1fr; }
+  .mix-track { grid-column: 1 / -1; grid-row: 2; }
+}
 
 /* ── Household profile (Forecast → Profile) ────────────────── */
 .profile-derived {
@@ -918,6 +940,11 @@ button.tag { cursor: pointer; border: none; }
   .add-holding .form-error { grid-column: 1 / -1; }
   /* Keep ticker, value, gain and actions; drop account, quantity, price. */
   .holdings-table { grid-template-columns: 1fr 1fr 1fr max-content; }
+}
+@media (max-width: 720px) {
+  /* Four action links don't fit beside three columns on a phone: let them wrap. */
+  .holdings-table { grid-template-columns: 1fr 1fr 1fr min-content; column-gap: 8px; }
+  .holdings-row .holding-actions { flex-wrap: wrap; gap: 2px 6px; }
   .holdings-head > :nth-child(n+2):nth-child(-n+4),
   .holdings-row > :nth-child(n+2):nth-child(-n+4) { display: none; }
 }
@@ -1104,111 +1131,7 @@ button.tag { cursor: pointer; border: none; }
 .fintual-result:hover { border-color: var(--text-muted); }
 .fintual-result .muted { font-size: 11px; }
 
-/* ---- Portfolio Health Review ---- */
-.phr-banner {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-.phr-banner > div:first-child { flex: 1; }
-.phr-status { font-size: 22px; font-weight: 600; color: var(--text-primary); margin-top: 2px; }
-.phr-score-wrap { text-align: center; }
-.phr-score { font-size: 44px; font-weight: 600; line-height: 1; color: var(--text-primary); }
-.phr-banner.pos .phr-score { color: var(--positive-text); }
-.phr-banner.warn .phr-score { color: var(--pending-text); }
-.phr-banner.neg .phr-score { color: var(--negative-text); }
-.phr-actions { display: flex; flex-direction: column; gap: 8px; }
-@media (max-width: 720px) {
-  .phr-banner { flex-direction: column; align-items: stretch; gap: 14px; }
-  .phr-actions { flex-direction: row; }
-}
-
-.phr-meter {
-  height: 5px;
-  border-radius: 999px;
-  background: var(--surface-border);
-  margin-top: 8px;
-  overflow: hidden;
-}
-.phr-meter-fill { height: 100%; background: var(--positive-text); border-radius: 999px; }
-
-.phr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.phr-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.phr-sev {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-.phr-sev.sev-high { background: var(--negative-bg); color: var(--negative-text); }
-.phr-sev.sev-medium { background: var(--pending-bg); color: var(--pending-text); }
-.phr-sev.sev-low { background: var(--positive-bg); color: var(--positive-text); }
-
-/* Allocation bars */
-.phr-alloc { display: flex; flex-direction: column; gap: 12px; }
-.phr-alloc-row {
-  display: grid;
-  grid-template-columns: 100px 1fr 56px 80px 72px;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-}
-.phr-alloc-label { color: var(--text-primary); font-weight: 500; }
-.phr-alloc-val { text-align: right; color: var(--text-primary); font-weight: 600; }
-.phr-alloc-target { color: var(--text-muted); font-size: 12px; }
-.phr-bar {
-  position: relative;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--surface-border);
-  overflow: hidden;
-}
-.phr-bar-range {
-  position: absolute;
-  top: 0; bottom: 0;
-  background: var(--surface-hover);
-}
-.phr-bar-fill {
-  position: absolute;
-  top: 0; bottom: 0; left: 0;
-  background: var(--positive-text);
-  border-radius: 999px;
-}
-.phr-bar-fill.off { background: var(--pending-text); }
-@media (max-width: 720px) {
-  .phr-alloc-row { grid-template-columns: 80px 1fr 48px; }
-  .phr-alloc-target { display: none; }
-}
-
-/* Findings */
-.phr-findings { display: flex; flex-direction: column; gap: 12px; }
-.phr-finding {
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-  background: var(--canvas);
-}
-.phr-finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.phr-cat { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
-.phr-finding-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
-.phr-finding-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
-.phr-finding-body.muted { color: var(--text-muted); margin-top: 4px; }
-.phr-finding-body strong { color: var(--text-primary); font-weight: 600; }
-
-/* Questionnaire extras */
-.phr-select {
+.field-select {
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--surface-border);
@@ -1216,56 +1139,6 @@ button.tag { cursor: pointer; border: none; }
   color: var(--text-primary);
   padding: 8px 10px;
   font-size: 13px;
-}
-.phr-check { flex-direction: row; align-items: center; gap: 8px; }
-.phr-check input { width: 16px; height: 16px; accent-color: var(--accent); }
-.phr-expense-row {
-  display: grid;
-  grid-template-columns: 1fr 90px 70px 70px auto;
-  gap: 8px;
-  align-items: center;
-}
-.phr-expense-row input, .phr-expense-row select {
-  background: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  padding: 6px 8px;
-  font-size: 13px;
-  min-width: 0;
-}
-
-/* ---- Stage 2: Stress scenario cards ---- */
-.phr-stress-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-  margin-top: 4px;
-}
-.phr-stress-card {
-  background: var(--canvas);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.phr-stress-card.worst {
-  border-color: var(--negative-bg);
-  background: var(--negative-bg);
-}
-.phr-stress-icon { font-size: 20px; line-height: 1; margin-bottom: 4px; }
-.phr-stress-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.phr-stress-impact { font-size: 22px; font-weight: 600; line-height: 1.2; margin-top: 6px; }
-.phr-stress-base { font-size: 12px; color: var(--text-muted); }
-.phr-stress-assumption {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.45;
-  margin-top: 8px;
-  border-top: 1px solid var(--surface-border);
-  padding-top: 8px;
 }
 
 /* ── Overview (dashboard home) ─────────────────────────────── */

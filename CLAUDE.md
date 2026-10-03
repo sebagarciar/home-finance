@@ -183,7 +183,7 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 
 ## Household profile (Forecast → Profile)
 
-One source for every household input; the forecast and the Health Review both read it. **Store only what the data can't tell; derive the rest.**
+One source for every household input; the forecast and the portfolio mix check both read it. **Store only what the data can't tell; derive the rest.**
 
 - **Stored** in the single `assumptions` row, via `GET/PUT /assumptions` ([routers/assumptions.py](backend/app/routers/assumptions.py)). PUT is a partial update.
   - Income lines and growth.
@@ -195,12 +195,22 @@ One source for every household input; the forecast and the Health Review both re
   - Monthly spend = average of the last ≤6 **complete** months, using the shared spending rules in [services/spending.py](backend/app/services/spending.py) (the same ones the dashboard uses).
   - Liquid cash = bank cash plus cash-class holdings.
   - Current mix = net worth by class, mapped to equity/bonds/cash. Unknown classes count as equity; debt is excluded.
-- **Risk & goal answers** stay in `investor_profiles` (history; reviews reference them) via `/portfolio-health/profile`. The **money columns were dropped** in migration `b8c9d0e1f2a3`. The review takes spending, liquid cash and planned expenses from the household instead, and notes in `missing_data` when there's no spending figure.
+- **Risk answers** (horizon, tolerance, capacity, loss reaction) live in `risk_profiles` via `/portfolio/risk-profile`. They're history-preserving; the latest is active.
 - UI: [pages/Profile.tsx](frontend/src/pages/Profile.tsx).
   - Derived tiles.
   - Household form: income, spending override, planned expenses, settings under "Show settings".
-  - The trimmed [ProfileQuestionnaire](frontend/src/pages/portfolio-health/ProfileQuestionnaire.tsx).
-  - Health Review links here (`go('forecast', { view: 'profile' })`) rather than embedding a form.
+  - [RiskQuestions](frontend/src/components/RiskQuestions.tsx).
+  - The Portfolio page links here (`go('forecast', { view: 'profile' })`).
+
+## Portfolio check: mix vs target
+
+The scored Portfolio Health Review was **removed** in Oct 2026 (migration `c9d0e1f2a3b4` dropped its review, finding, policy and metadata tables). In its place is one plain, live check. Don't re-add a composite score, AI narrative, stress tests or yfinance enrichment without asking.
+
+- [services/portfolio/](backend/app/services/portfolio/):
+  - `policy.derive_policy(RiskAnswers)`, which is pure. The risk profile is the lower of tolerance and capacity, then capped by a short horizon (unless capacity is very high and no planned expense falls within 24 months) and by a sell-after-a-drop reaction. `notes` explain the caps.
+  - `mix.mix_check(networth, policy)`: buckets come from `Holding.asset_class`, cash from bank balances, debt is excluded. Each bucket reports below / in / above its range and the drift from its midpoint; `drifting` means in range but more than 5pp off.
+- `GET /portfolio/checks` ([routers/portfolio.py](backend/app/routers/portfolio.py)) is computed live, with nothing persisted.
+- UI: [components/MixCheck.tsx](frontend/src/components/MixCheck.tsx), a card on the Portfolio page. There is no sub-tab.
 
 ## Cost basis & performance
 
@@ -239,7 +249,7 @@ Roadmap after the Oct 2026 product review (full write-up: `~/.claude/plans/i-wan
 
 1. ~~Needs attention~~: shipped (section above).
 2. ~~Slim Overview~~: shipped (see "Screen layout").
-3. ~~One household profile~~: shipped (section above). **Still to do: cut the Portfolio Health Review down** to a few plain checks, with no composite score. Its Stages 2–4 are frozen.
+3. ~~One household profile~~ and ~~cut the Health Review~~: shipped ("Household profile", "Portfolio check").
 4. **Goal-based forecast.** Amount + date → probability. Default horizon 5–10 years, with expert settings (ρ, σ, FX drift) behind "Advanced".
 
 Decided: **no per-person (mine / yours / shared) split.** The household is one pooled view.

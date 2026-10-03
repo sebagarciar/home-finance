@@ -21,7 +21,7 @@ from .routers import (
     investment_trades,
     networth,
     performance,
-    portfolio_health,
+    portfolio,
     prices,
     spending,
     transactions,
@@ -64,7 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(prices.router, dependencies=_protected)
     app.include_router(forecast.router, dependencies=_protected)
     app.include_router(assumptions.router, dependencies=_protected)
-    app.include_router(portfolio_health.router, dependencies=_protected)
+    app.include_router(portfolio.router, dependencies=_protected)
     app.include_router(investment_trades.router, dependencies=_protected)
     app.include_router(performance.router, dependencies=_protected)
     return app

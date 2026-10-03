@@ -12,7 +12,7 @@ FastAPI + SQLAlchemy backend, React + TypeScript frontend, and a categorization 
 - **Categorizes automatically, and learns from corrections** — a five-stage cascade (exact rule match → whole-word substring → fuzzy match → local LLM via Ollama → fallback) that gets faster and more accurate as you correct it; manual corrections always win and are never overwritten by the automated stages.
 - **Tracks net worth across currencies** — cash balances (manually maintained — imported transaction history is inherently partial, so it never drives the bank balance), investment holdings priced live (yfinance / Fintual) and converted through a single FX contract, and debt.
 - **Runs Monte Carlo retirement/goal forecasts** — vectorized NumPy simulation using historical block-bootstrap sampling of real asset returns (not a Gaussian assumption), with correlated income/spending shocks in down markets, real or nominal terms, and a full assumptions editor.
-- **Reviews portfolio health** — a deterministic rules engine that scores your holdings against an investment-policy profile built from a short questionnaire, with explainable findings (and an optional local-LLM layer that explains findings in plain language — it never invents them or gives buy/sell advice).
+- **Checks your mix against a target** — four risk questions set a target allocation range; the Portfolio page shows today's mix against it, live and deterministic, with no scores or advice.
 
 Manual data entry only — no bank APIs, because none of the banks involved offer one to individual users. Tax is explicitly out of scope.
 
@@ -20,7 +20,7 @@ Manual data entry only — no bank APIs, because none of the banks involved offe
 
 **Backend:** FastAPI · SQLAlchemy 2.0 · Alembic · Pydantic · pytest
 **Frontend:** Vite · React · TypeScript · TanStack Query · Recharts
-**Data/ML:** NumPy (Monte Carlo forecasting) · RapidFuzz (categorization) · Ollama / Llama 3.1 8B (local LLM categorization + brief explanations) · yfinance / Fintual (pricing)
+**Data/ML:** NumPy (Monte Carlo forecasting) · RapidFuzz (categorization) · Ollama / Llama 3.1 8B (local LLM categorization fallback) · yfinance / Fintual (pricing)
 
 ## Architecture invariants
 
@@ -71,6 +71,6 @@ npm run build       # TS check + bundle
 
 ## Status
 
-Phases 1–7 of the build plan are complete: data import, categorization, spending dashboard, net worth, Monte Carlo forecasting, and a full assumptions editor. Phase 8 (debt terms — amortization schedules) is next.
+Phases 1–7 of the build plan are complete: data import, categorization, spending dashboard, net worth, Monte Carlo forecasting, and a full assumptions editor. Phase 8 (debt amortization) is deprioritized; see CLAUDE.md "What's next".
 
-Portfolio Health Review — a rules-based investment-policy scoring engine, built outside the original phase plan — has its first stage shipped (profile questionnaire, deterministic scoring, explainable findings); liquidity/stress-testing and an AI explanation layer are planned next.
+Since then: cost basis with asset-vs-currency attribution, a "Needs attention" list that keeps manual data current, one household profile that the forecast and the portfolio check share (spending, cash and the current mix are derived from data), and a slimmer Overview.

@@ -2,17 +2,17 @@
 // planned big expenses, an optional spending override, risk answers, and
 // forecast settings. Spending, liquid cash and the current asset mix are
 // derived from data (GET /assumptions/derived) and shown, not typed.
-// The forecast and the Health Review both read from here.
+// The forecast and the Portfolio mix check both read from here.
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   api, type Assumptions as Household, type AssumptionsUpdate, type PlannedExpense,
 } from '../api/client'
-import { useAssumptions, useAssumptionsDerived, useInvestorProfile, useSpendingSummary } from '../api/hooks'
+import { useAssumptions, useAssumptionsDerived, useRiskProfile, useSpendingSummary } from '../api/hooks'
 import { useCurrency } from '../lib/currency'
-import { CURRENCIES } from './portfolio-health/constants'
-import { MoneyField, Section } from './portfolio-health/fields'
-import { ProfileQuestionnaire } from './portfolio-health/ProfileQuestionnaire'
+import { CURRENCIES } from '../lib/options'
+import { MoneyField, Section } from '../components/fields'
+import { RiskQuestions } from '../components/RiskQuestions'
 
 interface Form {
   income1: string; income1ccy: string
@@ -48,12 +48,12 @@ function seedForm(h: Household): Form {
 
 export function Profile() {
   const householdQ = useAssumptions()
-  const profileQ = useInvestorProfile()
-  if (!householdQ.data || profileQ.isLoading) return <ProfileSkeleton />
+  const riskQ = useRiskProfile()
+  if (!householdQ.data || riskQ.isLoading) return <ProfileSkeleton />
   return (
     <>
       <HouseholdForm initial={householdQ.data} />
-      <ProfileQuestionnaire initial={profileQ.data?.profile ?? null} />
+      <RiskQuestions initial={riskQ.data?.profile ?? null} />
     </>
   )
 }
@@ -117,7 +117,7 @@ function HouseholdForm({ initial }: { initial: Household }) {
       setForm(seedForm(updated))
       // ['assumptions'] also covers the derived figures (effective spend moves).
       await Promise.all(
-        [['assumptions'], ['forecast'], ['portfolioHealth']].map((queryKey) => qc.invalidateQueries({ queryKey })),
+        [['assumptions'], ['forecast'], ['portfolio']].map((queryKey) => qc.invalidateQueries({ queryKey })),
       )
       setSaved(true)
     } catch (e) {
@@ -133,7 +133,7 @@ function HouseholdForm({ initial }: { initial: Household }) {
         <div>
           <h2 className="card-title">Household profile</h2>
           <div className="card-meta">
-            One place for what your data can&rsquo;t tell. The forecast and the Health Review both use it;
+            One place for what your data can&rsquo;t tell. The forecast and the portfolio check use it;
             spending, cash and your asset mix come from your statements and balances.
           </div>
         </div>
@@ -210,7 +210,7 @@ function HouseholdForm({ initial }: { initial: Household }) {
 
         <Section
           title="Planned big expenses"
-          subtitle="The forecast draws them down in their month; the Health Review keeps cash for ones within 2 years."
+          subtitle="The forecast draws them down in their month; one within 2 years also makes a short-horizon target more cautious."
         >
           {form.planned.map((e, i) => (
             <div className="planned-row" key={i}>

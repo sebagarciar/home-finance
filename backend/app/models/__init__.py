@@ -6,14 +6,8 @@ from .fx import FxRate
 from .holdings import Holding
 from .investment_trades import InvestmentTrade, TradeKind
 from .networth import NetworthSnapshot
-from .portfolio_health import (
-    InvestmentPolicyProfile,
-    InvestorProfile,
-    PortfolioFinding,
-    PortfolioHealthReview,
-    SecurityMetadata,
-)
 from .prices import PriceCacheEntry
+from .risk_profile import RiskProfile
 from .transactions import Transaction, TxnType
 
 __all__ = [
@@ -29,12 +23,8 @@ __all__ = [
     "InvestmentTrade",
     "TradeKind",
     "NetworthSnapshot",
-    "InvestorProfile",
-    "InvestmentPolicyProfile",
-    "PortfolioHealthReview",
-    "PortfolioFinding",
-    "SecurityMetadata",
     "PriceCacheEntry",
+    "RiskProfile",
     "Transaction",
     "TxnType",
 ]
