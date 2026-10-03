@@ -22,7 +22,7 @@ interface Form {
   spendingGrowthPct: string
   planned: PlannedExpense[]
   retEquityPct: string; retBondsPct: string; retCashPct: string
-  horizon: string; rho: string; inflationPct: string; fxDriftPct: string
+  rho: string; inflationPct: string; fxDriftPct: string
 }
 
 const pct = (d: number) => String(Math.round(d * 1000) / 10) // 0.07 -> "7"
@@ -41,7 +41,7 @@ function seedForm(h: Household): Form {
     retEquityPct: pct(h.return_assumptions.equity ?? 0),
     retBondsPct: pct(h.return_assumptions.bonds ?? 0),
     retCashPct: pct(h.return_assumptions.cash ?? 0),
-    horizon: String(h.horizon_years), rho: String(h.correlation_rho),
+    rho: String(h.correlation_rho),
     inflationPct: pct(h.inflation_rate), fxDriftPct: pct(h.fx_drift_annual),
   }
 }
@@ -107,7 +107,6 @@ function HouseholdForm({ initial }: { initial: Household }) {
         bonds: num(form.retBondsPct) / 100,
         cash: num(form.retCashPct) / 100,
       },
-      horizon_years: Math.round(num(form.horizon)),
       correlation_rho: num(form.rho),
       inflation_rate: num(form.inflationPct) / 100,
       fx_drift_annual: num(form.fxDriftPct) / 100,
@@ -244,7 +243,6 @@ function HouseholdForm({ initial }: { initial: Household }) {
               <PctField label="Cash return (annual)" value={form.retCashPct} onChange={(v) => set({ retCashPct: v })}
                 hintText="Equity/bond returns are a fallback; the forecast samples real VT/AGG history when it can." />
               <PctField label="Inflation (annual)" value={form.inflationPct} onChange={(v) => set({ inflationPct: v })} />
-              <PlainField label="Default horizon (years)" value={form.horizon} onChange={(v) => set({ horizon: v })} />
               <PlainField label="Correlation ρ (0–1)" value={form.rho} onChange={(v) => set({ rho: v })}
                 hintText="How hard bad-market months hit income and spending. Default 0.3." />
               <PlainField label="Income noise σ (0–1)" value={form.incomeSigma} onChange={(v) => set({ incomeSigma: v })}

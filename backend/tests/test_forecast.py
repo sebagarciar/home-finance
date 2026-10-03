@@ -157,8 +157,7 @@ def client(monkeypatch):
 def test_forecast_endpoint_returns_bands(client):
     r = client.post(
         "/forecast/run",
-        json={"horizon_years": 5, "real": True, "target": 20000000,
-              "n_paths": 500, "seed": 1},
+        json={"horizon_years": 5, "real": True, "n_paths": 500, "seed": 1},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -166,7 +165,7 @@ def test_forecast_endpoint_returns_bands(client):
     assert body["horizon_years"] == 5
     assert len(body["bands"]) == 5 * 12 + 1
     assert body["bands"][0]["month"] == 0
-    assert 0.0 <= body["prob_hit_target"] <= 1.0
+    assert body["goals"] == []  # none set on the seeded profile
     # Bands should be ordered p10 <= p50 <= p90 at the terminal month.
     last = body["bands"][-1]
     assert last["p10"] <= last["p50"] <= last["p90"]

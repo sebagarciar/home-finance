@@ -103,6 +103,18 @@ def test_planned_expenses_validated_and_sorted(client):
     assert client.put("/assumptions", json={"planned_expenses": [zero]}).status_code == 422
 
 
+def test_goals_validated_and_sorted(client):
+    r = client.put("/assumptions", json={"goals": [
+        {"label": "Deposit", "amount": "15000", "currency": "eur", "month": "2028-06"},
+        {"label": "Buffer", "amount": "3000000", "currency": "CLP", "month": "2027-01"},
+    ]})
+    assert r.status_code == 200, r.text
+    assert [g["label"] for g in r.json()["goals"]] == ["Buffer", "Deposit"]
+    assert r.json()["goals"][1]["currency"] == "EUR"
+    bad = {"label": "x", "amount": "-5", "currency": "EUR", "month": "2028-01"}
+    assert client.put("/assumptions", json={"goals": [bad]}).status_code == 422
+
+
 def test_derived_endpoint_without_data(client):
     body = client.get("/assumptions/derived").json()
     assert body["spending"] == {

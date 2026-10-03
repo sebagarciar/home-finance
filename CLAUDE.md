@@ -180,6 +180,12 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
   - **planned expenses** = dated outflows in the step covering their month.
 
   The response's `inputs` block echoes what was used, and the Forecast page shows it in one line.
+- **Goals** are the headline. `assumptions.goals` holds `[{label, amount, currency, month}]`, meaning "have this much net worth by then".
+  - For each goal the engine reports `probability` (the share of paths with net worth at or above the amount in that month) and P10/P50/P90 at that date. In real mode the amount is read as today's money; a past goal gets `probability: null`.
+  - The horizon stretches to cover the furthest goal (whole years, capped at 60).
+  - A goal you'll actually spend should *also* be a planned expense. Goals don't draw money down.
+  - UI: [components/Goals.tsx](frontend/src/components/Goals.tsx), edited inline and saved with `PUT /assumptions { goals }`. Goals are drawn as circles on the fan chart. Horizons are 5/10/20/30 (default 10); Real/Nominal sits under "Advanced".
+  - The old end-of-horizon `target` / `prob_hit_target` is gone.
 
 ## Household profile (Forecast → Profile)
 
@@ -250,7 +256,11 @@ Roadmap after the Oct 2026 product review (full write-up: `~/.claude/plans/i-wan
 1. ~~Needs attention~~: shipped (section above).
 2. ~~Slim Overview~~: shipped (see "Screen layout").
 3. ~~One household profile~~ and ~~cut the Health Review~~: shipped ("Household profile", "Portfolio check").
-4. **Goal-based forecast.** Amount + date → probability. Default horizon 5–10 years, with expert settings (ρ, σ, FX drift) behind "Advanced".
+4. ~~Goal-based forecast~~: shipped (see "Forecast model").
+
+The product-review roadmap is complete. Open items noted along the way:
+- A `credit`-type account with a positive balance counts as cash in net worth. Check whether it should count as debt.
+- Import preselects the account but not its parser; there's no account→parser link.
 
 Decided: **no per-person (mine / yours / shared) split.** The household is one pooled view.
 

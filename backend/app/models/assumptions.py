@@ -49,3 +49,7 @@ class Assumptions(Base):
     # The forecast draws them down; the Health Review raises its liquidity
     # target when one is near.
     planned_expenses: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    # Goals: [{label, amount, currency, month: "YYYY-MM"}] — "have this much net
+    # worth by then". The forecast reports the chance of each.
+    goals: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

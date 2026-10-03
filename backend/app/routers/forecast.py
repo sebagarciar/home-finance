@@ -2,7 +2,8 @@
 
 POST /forecast/run — runs the simulation off the household profile (the
 `assumptions` row) plus derived figures (current mix, average spend), with a few
-inline run controls (horizon, real/nominal, target, extra life events). This
+inline run controls (horizon, real/nominal, extra life events). Goals come from
+the profile; each gets the chance of having its amount by its month. This
 router reads; the profile is edited via /assumptions.
 
 Output is base currency (CLP); the EUR display toggle is applied client-side.
@@ -31,7 +32,6 @@ class LifeEventIn(BaseModel):
 class ForecastRequest(BaseModel):
     horizon_years: int | None = Field(default=None, ge=1, le=60)
     real: bool = True
-    target: Decimal | None = None
     n_paths: int = Field(default=10000, ge=200, le=50000)
     seed: int | None = None
     life_events: list[LifeEventIn] = Field(default_factory=list)
@@ -62,6 +62,19 @@ class ForecastInputs(BaseModel):
     planned_expenses: int
 
 
+class GoalResult(BaseModel):
+    label: str
+    amount: str
+    currency: str
+    month: str
+    months_away: int
+    amount_base: float
+    probability: float | None  # None for a goal whose month has passed
+    p10: float | None
+    p50: float | None
+    p90: float | None
+
+
 class ForecastResponse(BaseModel):
     currency: str
     real: bool
@@ -70,8 +83,7 @@ class ForecastResponse(BaseModel):
     start_networth: float
     bands: list[Band]
     terminal: Terminal
-    target: float | None
-    prob_hit_target: float | None
+    goals: list[GoalResult]
     inputs: ForecastInputs
 
 
@@ -80,7 +92,6 @@ def post_run(req: ForecastRequest, db: Session = Depends(get_session)) -> dict:
     overrides = {
         "horizon_years": req.horizon_years,
         "real": req.real,
-        "target": req.target,
         "life_events": [ev.model_dump() for ev in req.life_events],
     }
     return run_forecast(db, overrides=overrides, n_paths=req.n_paths, seed=req.seed)

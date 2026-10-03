@@ -1,7 +1,7 @@
 """Household profile (the single `assumptions` row).
 
 The profile stores only what the data can't tell: income, an optional
-spending override, planned big expenses, and forecast settings.
+spending override, planned big expenses, goals, and forecast settings.
 
 - GET  /assumptions         — the stored row.
 - PUT  /assumptions         — partial update (only the provided fields change).
@@ -45,6 +45,15 @@ class PlannedExpense(BaseModel):
     month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM")
 
 
+class Goal(BaseModel):
+    """Have `amount` of net worth by `month` (in today's money when real)."""
+
+    label: str = Field(default="", max_length=80)
+    amount: Decimal = Field(gt=0)
+    currency: str = Field(min_length=3, max_length=3)
+    month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="YYYY-MM")
+
+
 class AssumptionsOut(BaseModel):
     income_user1: str
     income_user1_currency: str
@@ -56,6 +65,7 @@ class AssumptionsOut(BaseModel):
     spending_override_currency: str
     spending_growth_rate: float
     planned_expenses: list[PlannedExpense]
+    goals: list[Goal]
     return_assumptions: dict[str, float]
     horizon_years: int
     correlation_rho: float
@@ -77,6 +87,7 @@ class AssumptionsOut(BaseModel):
             spending_override_currency=a.spending_override_currency,
             spending_growth_rate=float(a.spending_growth_rate),
             planned_expenses=[PlannedExpense(**e) for e in a.planned_expenses or []],
+            goals=[Goal(**g) for g in a.goals or []],
             return_assumptions={k: float(v) for k, v in a.return_assumptions.items()},
             horizon_years=a.horizon_years,
             correlation_rho=float(a.correlation_rho),
@@ -98,6 +109,7 @@ class AssumptionsUpdate(BaseModel):
     spending_override_currency: str | None = _opt_currency()
     spending_growth_rate: float | None = Field(default=None, ge=-0.5, le=1.0)
     planned_expenses: list[PlannedExpense] | None = None
+    goals: list[Goal] | None = None
     return_assumptions: dict[str, float] | None = None
     horizon_years: int | None = Field(default=None, ge=1, le=60)
     correlation_rho: float | None = Field(default=None, ge=0, le=1)
@@ -136,16 +148,18 @@ def update_assumptions(payload: AssumptionsUpdate, db: Session = Depends(get_ses
         if not rets:
             raise HTTPException(status_code=422, detail="return_assumptions cannot be empty")
 
-    if "planned_expenses" in data:
-        data["planned_expenses"] = [
-            {
-                "label": e["label"].strip(),
-                "amount": str(e["amount"]),
-                "currency": e["currency"].upper(),
-                "month": e["month"],
-            }
-            for e in sorted(data["planned_expenses"], key=lambda e: e["month"])
-        ]
+    # Dated lists are stored sorted by month, amounts as strings (Decimal-safe).
+    for key in ("planned_expenses", "goals"):
+        if key in data:
+            data[key] = [
+                {
+                    "label": e["label"].strip(),
+                    "amount": str(e["amount"]),
+                    "currency": e["currency"].upper(),
+                    "month": e["month"],
+                }
+                for e in sorted(data[key], key=lambda e: e["month"])
+            ]
 
     for field, value in data.items():
         setattr(a, field, value)

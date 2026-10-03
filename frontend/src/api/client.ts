@@ -308,8 +308,7 @@ export interface ForecastResult {
   start_networth: number;
   bands: ForecastBand[];
   terminal: { p10: number; p50: number; p90: number };
-  target: number | null;
-  prob_hit_target: number | null;
+  goals: GoalResult[];
   /** What the run used (base CLP), so the page can say where numbers came from. */
   inputs: {
     monthly_income: number;
@@ -322,6 +321,25 @@ export interface ForecastResult {
 }
 
 export type SpendingSource = "override" | "derived" | "none";
+
+/** "Have `amount` of net worth by `month`" (today's money when the run is real). */
+export interface Goal {
+  label: string;
+  amount: string;
+  currency: string;
+  /** "YYYY-MM" */
+  month: string;
+}
+
+export interface GoalResult extends Goal {
+  months_away: number;
+  amount_base: number;
+  /** Share of simulated paths at or above the amount that month; null if the month has passed. */
+  probability: number | null;
+  p10: number | null;
+  p50: number | null;
+  p90: number | null;
+}
 
 export interface PlannedExpense {
   label: string;
@@ -344,6 +362,7 @@ export interface Assumptions {
   spending_override_currency: string;
   spending_growth_rate: number;
   planned_expenses: PlannedExpense[];
+  goals: Goal[];
   return_assumptions: Record<string, number>;
   horizon_years: number;
   correlation_rho: number;
@@ -369,7 +388,6 @@ export interface AssumptionsDerived {
 export interface ForecastRequest {
   horizon_years?: number;
   real?: boolean;
-  target?: number | null;
   n_paths?: number;
   seed?: number | null;
   life_events?: { month: number; amount: number; currency?: string; label?: string }[];

@@ -21,8 +21,10 @@ Model, per the build spec:
 - **Life events**: the profile's planned expenses as dated outflows, plus any
   per-run lump sums.
 
-Outputs P10/P25/P50/P75/P90 net-worth bands across the horizon plus the
-probability of finishing at or above an editable target.
+Outputs P10/P25/P50/P75/P90 net-worth bands across the horizon, and for each
+household goal ("have X by month M") the share of paths at or above X that month.
+In real terms a goal's amount is read as today's money. The horizon stretches
+to cover the furthest goal.
 """
 from __future__ import annotations
 
@@ -36,7 +38,7 @@ from sqlalchemy.orm import Session
 
 from ...models import Assumptions
 from ..fx.conversion import to_base_current
-from ..household import current_allocation, effective_monthly_spend, upcoming_expenses
+from ..household import current_allocation, effective_monthly_spend, month_offset, upcoming_expenses
 from ..networth import current_networth
 from .blocks import (
     ASSET_PROXIES,
@@ -54,6 +56,7 @@ log = logging.getLogger(__name__)
 _PARAMETRIC_VOL = {"equity": 0.15, "bonds": 0.05, "cash": 0.0}
 
 _PERCENTILES = (10, 25, 50, 75, 90)
+_MAX_MONTHS = 60 * 12
 
 
 def _add_months(d: date, months: int) -> date:
@@ -139,9 +142,11 @@ def run_forecast(
 
     horizon_years = int(overrides.get("horizon_years") or a.horizon_years)
     real = bool(overrides.get("real", True))
-    target = overrides.get("target")
-    target_dec = Decimal(str(target)) if target is not None else None
-    n_months = horizon_years * 12
+    goals = [{**g, "months_away": month_offset(g["month"])} for g in a.goals or []]
+    # Stretch the horizon to cover the furthest goal (whole years).
+    furthest = max((g["months_away"] for g in goals), default=0)
+    n_months = min(max(horizon_years * 12, -(-furthest // 12) * 12), _MAX_MONTHS)
+    horizon_years = n_months // 12
 
     rng = np.random.default_rng(seed)
 
@@ -243,9 +248,32 @@ def run_forecast(
     ]
 
     terminal = nw[:, -1]
-    prob_hit_target = (
-        float(np.mean(terminal >= float(target_dec))) if target_dec is not None else None
-    )
+
+    # --- Goals: chance net worth is >= the amount in the goal's month ----------
+    # nw[:, t] is net worth t months from today; a goal this month reads today's.
+    goal_out = []
+    for g in goals:
+        t = g["months_away"]
+        amount_clp = float(to_base_current(db, Decimal(str(g["amount"])), g["currency"]))
+        row: dict = {
+            "label": g.get("label", ""),
+            "amount": str(g["amount"]),
+            "currency": g["currency"],
+            "month": g["month"],
+            "months_away": t,
+            "amount_base": round(amount_clp, 2),
+            "probability": None,
+            "p10": None,
+            "p50": None,
+            "p90": None,
+        }
+        if 0 <= t <= n_months:  # past goals are reported without a probability
+            col = nw[:, t]
+            row["probability"] = float(np.mean(col >= amount_clp))
+            row["p10"], row["p50"], row["p90"] = (
+                round(float(v), 2) for v in np.percentile(col, (10, 50, 90))
+            )
+        goal_out.append(row)
 
     return {
         "currency": "CLP",
@@ -259,8 +287,7 @@ def run_forecast(
             "p50": round(float(np.percentile(terminal, 50)), 2),
             "p90": round(float(np.percentile(terminal, 90)), 2),
         },
-        "target": float(target_dec) if target_dec is not None else None,
-        "prob_hit_target": prob_hit_target,
+        "goals": goal_out,
         # What the run used, so the UI can say where the numbers came from.
         "inputs": {
             "monthly_income": round(income_base, 2),

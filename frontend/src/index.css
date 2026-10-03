@@ -484,6 +484,7 @@ input[type="date"] { color-scheme: light; }
   justify-content: center;
   gap: 8px;
   height: 44px;
+  white-space: nowrap;  /* fixed height: wrapped labels would spill out */
   padding: 0 22px;
   border-radius: var(--radius-pill);
   font-size: 15px;
@@ -775,6 +776,49 @@ button.tag { cursor: pointer; border: none; }
   .mix-row { grid-template-columns: 1fr 1fr; }
   .mix-track { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* ── Forecast goals ────────────────────────────────────────── */
+.goal-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.goal-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  text-align: left;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--surface-border);
+  cursor: pointer;
+}
+.goal-tile:hover { border-color: var(--text-faint); }
+.goal-head { display: flex; flex-direction: column; gap: 2px; }
+.goal-label { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.goal-head .muted { font-size: 12px; }
+.goal-prob { font-size: 30px; font-weight: 600; line-height: 1.1; }
+.goal-prob-sub { font-size: 13px; font-weight: 500; margin-left: 6px; color: var(--text-muted); }
+.goal-foot { font-size: 12px; }
+.goal-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 0.7fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+.goal-form input, .goal-form select { padding: 8px 10px; font-size: 13px; min-width: 0; }
+.goal-form-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+@media (max-width: 720px) {
+  .goal-form { grid-template-columns: 1fr 1fr; }
+  .goal-form-actions { grid-column: 1 / -1; }
+}
+.forecast-advanced summary { cursor: pointer; font-size: 12px; color: var(--accent); padding: 6px 0; }
+.forecast-advanced[open] summary { margin-bottom: 8px; }
 
 /* ── Household profile (Forecast → Profile) ────────────────── */
 .profile-derived {

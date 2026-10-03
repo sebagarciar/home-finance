@@ -193,3 +193,57 @@ def test_migration_up_and_down(tmp_path: Path):
     run("downgrade", "a7b8c9d0e1f2")
     assert {"spending_baseline_monthly", "asset_allocation"} <= cols("assumptions")
     assert "monthly_expenses" in cols("investor_profiles")
+
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+def _flat_household(db, start_cash: str) -> Assumptions:
+    """Zero flows, zero vol, cash-only: net worth stays at the start value."""
+    a = Account(name="Cash", country="CL", type=AccountType.checking, native_currency="CLP",
+                current_balance=Decimal(start_cash))
+    db.add(a)
+    h = _household(db)
+    h.income_noise_sigma = Decimal("0")
+    h.correlation_rho = Decimal("0")
+    h.spending_override_monthly = Decimal("0")
+    h.return_assumptions = {"cash": 0.0}
+    db.commit()
+    return h
+
+
+def _month(offset: int) -> str:
+    t = date.today()
+    total = t.year * 12 + t.month - 1 + offset
+    return f"{total // 12:04d}-{total % 12 + 1:02d}"
+
+
+def test_goal_probability_and_horizon_stretch(db):
+    h = _flat_household(db, "1000")
+    h.goals = [
+        {"label": "reach", "amount": "1000", "currency": "CLP", "month": _month(3)},
+        {"label": "miss", "amount": "1001", "currency": "CLP", "month": _month(3)},
+        {"label": "far", "amount": "500", "currency": "CLP", "month": _month(14 * 12 + 2)},
+        {"label": "past", "amount": "1", "currency": "CLP", "month": _month(-1)},
+    ]
+    db.commit()
+
+    r = run_forecast(db, overrides={"real": False, "horizon_years": 10}, n_paths=50, seed=1,
+                     returns_mode="deterministic", allocation={"cash": 1.0})
+    goals = {g["label"]: g for g in r["goals"]}
+    assert goals["reach"]["probability"] == 1.0
+    assert goals["miss"]["probability"] == 0.0
+    assert goals["reach"]["p50"] == 1000
+    # 14y2m away: the 10y horizon stretches to 15y so the goal is covered.
+    assert r["horizon_years"] == 15 and goals["far"]["probability"] == 1.0
+    assert goals["past"]["probability"] is None and goals["past"]["months_away"] == -1
+
+
+def test_goal_counts_planned_expense_before_it(db):
+    """A planned expense before the goal date lowers net worth at the goal."""
+    h = _flat_household(db, "1000")
+    h.planned_expenses = [{"label": "car", "amount": "400", "currency": "CLP", "month": _month(1)}]
+    h.goals = [{"label": "keep 800", "amount": "800", "currency": "CLP", "month": _month(6)}]
+    db.commit()
+    r = run_forecast(db, overrides={"real": False}, n_paths=50, seed=1,
+                     returns_mode="deterministic", allocation={"cash": 1.0})
+    assert r["goals"][0]["probability"] == 0.0 and r["goals"][0]["p50"] == 600
