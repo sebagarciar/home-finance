@@ -1,5 +1,6 @@
 // Consolidated household home: net worth by asset class (never per bank),
-// this month's spending by category, the total, and recent activity.
+// cash runway, this month's spending by category (once, against the usual
+// pace), the total with its currency exposure, and recent activity.
 // Reads the shared net-worth / spending / transaction caches.
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
@@ -21,9 +22,17 @@ const ICON = {
   invest: icon(<><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>),
   debt: icon(<><path d="M4 11 12 4l8 7v9H4z" /><path d="M10 20v-5h4v5" /></>),
   spend: icon(<><path d="M3 4h2l2 11h11l2-7H7" /><circle cx="9" cy="19" r="1.5" /><circle cx="17" cy="19" r="1.5" /></>),
+  runway: icon(<><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2.5 2.5" /><path d="M9 2h6" /></>),
   info: icon(<><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>),
   in: icon(<><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></>),
 }
+
+// Stable colors for the common currencies; anything else cycles the palette.
+const CURRENCY_COLOR: Record<string, string> = {
+  CLP: 'var(--cat-5)', EUR: 'var(--cat-2)', USD: 'var(--cat-6)', GBP: 'var(--cat-4)',
+}
+const PALETTE = ['var(--cat-1)', 'var(--cat-3)', 'var(--cat-7)', 'var(--cat-8)']
+const currencyColor = (code: string, i: number) => CURRENCY_COLOR[code] ?? PALETTE[i % PALETTE.length]
 
 const CLASS_LABEL: Record<string, string> = {
   equity: 'Equity', bonds: 'Bonds', bond: 'Bonds', crypto: 'Crypto', fund: 'Funds',
@@ -103,8 +112,26 @@ export function Overview() {
         : null
     const vsUsual = usual && usual > 0 ? (spend - usual) / usual : null
     const label = new Date(`${current}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })
-    return { label, spend, rows, vsUsual }
+    // Runway divides by complete months only: a running month a few days old
+    // would drag the average down and overstate the runway.
+    const complete = (isRunning ? months.slice(0, -1) : months).slice(-TRAILING_MONTHS)
+    const avgMonthlySpend = complete.length
+      ? complete.reduce((s, m) => s + (spendByMonth.get(m) ?? 0), 0) / complete.length
+      : null
+    return { label, spend, rows, vsUsual, usual, isRunning, avgMonthlySpend, completeMonths: complete.length }
   }, [summary, paceQ.data])
+
+  const runway = classes && month?.avgMonthlySpend && month.avgMonthlySpend > 0
+    ? classes.cash / month.avgMonthlySpend
+    : null
+
+  const exposure = useMemo(() => {
+    const rows = (nw?.by_currency ?? [])
+      .map((r) => ({ currency: r.currency, value: Number(r.total_in_base) }))
+      .filter((r) => r.value > 0)
+    const sum = rows.reduce((s, r) => s + r.value, 0)
+    return sum > 0 ? rows.map((r) => ({ ...r, share: r.value / sum })).sort((a, b) => b.share - a.share) : []
+  }, [nw])
 
   const pct = (x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(Math.round(x * 100))}%`
   const signed = (x: number) => (x > 0 ? `+${format(x)}` : x < 0 ? `−${format(-x)}` : format(0))
@@ -126,10 +153,15 @@ export function Overview() {
               />
               <ClassCard
                 soft
-                icon={ICON.spend}
-                title={month ? `Spent in ${month.label}` : 'Spending'}
-                sub={month?.vsUsual != null ? `${pct(month.vsUsual)} vs usual` : 'No history yet'}
-                amount={month ? format(month.spend) : '—'}
+                icon={ICON.runway}
+                title="Cash runway"
+                sub={runway != null ? 'Cash ÷ avg monthly spend' : 'Needs balances and a month of spending'}
+                hint={runway != null
+                  ? `Cash divided by the average spend of the last ${month?.completeMonths} complete ${month?.completeMonths === 1 ? 'month' : 'months'}`
+                  : undefined}
+                amount={runway != null ? `${runway.toFixed(1)} mo` : '—'}
+                // Emergency-fund rule of thumb: under 3 months is tight, 3–6 thin.
+                tone={runway == null ? undefined : runway < 3 ? 'neg' : runway < 6 ? 'warn' : undefined}
               />
             </>
           ) : (
@@ -148,6 +180,13 @@ export function Overview() {
                   <span className={`trend-pill ${month.vsUsual <= 0 ? 'pos' : 'neg'}`}>{pct(month.vsUsual)} vs usual</span>
                 )}
               </div>
+              {month.usual != null && (
+                <p className="panel-caption">
+                  {month.isRunning
+                    ? `Usual by day ${new Date().getDate()}: ${format(month.usual)}`
+                    : `Usual month: ${format(month.usual)}`}
+                </p>
+              )}
               <div className="catbar">
                 {month.rows.map((r) => (
                   <span key={r.category} style={{ flex: r.total, background: categoryColorHex(r.category) }} />
@@ -194,6 +233,28 @@ export function Overview() {
               <div className="panel-row"><dt>Debt</dt><dd className="num">{classes.debt < 0 ? `−${format(-classes.debt)}` : format(0)}</dd></div>
             </dl>
           )}
+          {exposure.length > 0 && (
+            <div className="panel-exposure">
+              <div className="panel-exposure-label">By currency</div>
+              <div className="exposure-bar">
+                {exposure.map((e, i) => (
+                  <div
+                    key={e.currency}
+                    style={{ width: `${e.share * 100}%`, background: currencyColor(e.currency, i) }}
+                    title={`${e.currency} ${Math.round(e.share * 100)}%`}
+                  />
+                ))}
+              </div>
+              <div className="exposure-legend">
+                {exposure.map((e, i) => (
+                  <span key={e.currency} className="exposure-chip">
+                    <span className="dot" style={{ background: currencyColor(e.currency, i) }} />
+                    {e.currency} {Math.round(e.share * 100)}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <h2 className="section-title" style={{ marginTop: 20 }}>Recent activity</h2>
@@ -225,16 +286,19 @@ export function Overview() {
 }
 
 function ClassCard({
-  icon, title, sub, amount, soft,
-}: { icon: ReactNode; title: string; sub: string; amount: string; soft?: boolean }) {
+  icon, title, sub, amount, soft, tone, hint,
+}: {
+  icon: ReactNode; title: string; sub: string; amount: string; soft?: boolean; tone?: 'neg' | 'warn'; hint?: string
+}) {
+  const color = tone === 'neg' ? 'var(--negative-text)' : tone === 'warn' ? 'var(--pending-text)' : undefined
   return (
-    <div className={`class-card${soft ? ' soft' : ''}`}>
+    <div className={`class-card${soft ? ' soft' : ''}`} title={hint}>
       <span className="disc">{icon}</span>
       <div className="class-card-body">
         <div className="class-card-title">{title}</div>
         <div className="class-card-sub">{sub}</div>
       </div>
-      <span className="class-card-amount num">{amount}</span>
+      <span className="class-card-amount num" style={{ color }}>{amount}</span>
     </div>
   )
 }

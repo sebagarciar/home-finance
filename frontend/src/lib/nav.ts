@@ -7,7 +7,7 @@ export type Tab = 'dashboard' | 'portfolio' | 'forecast' | 'transactions'
 
 export interface NavIntent {
   /** Transactions sub-view. */
-  view?: 'transactions' | 'import'
+  view?: 'transactions' | 'trends' | 'import'
   category?: string
   start?: string
   accountId?: number

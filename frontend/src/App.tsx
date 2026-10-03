@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Login } from './pages/Login'
 import { PageLoading } from './components/PageLoading'
+import { UpdatePanel } from './components/UpdatePanel'
 
 // Route-level code splitting: each tab is its own chunk, fetched on first
 // visit. Recharts lands in a shared chunk pulled in with the first page that
@@ -19,13 +20,13 @@ const TITLES: Record<Tab, string> = {
   dashboard: 'Overview',
   portfolio: 'Portfolio',
   forecast: 'Forecast',
-  transactions: 'Transactions',
+  transactions: 'Spending',
 }
 const SUBTITLES: Record<Tab, string> = {
   dashboard: 'Everything the household owns and spends, in one place',
   portfolio: 'Net worth, holdings, and historical balance',
   forecast: 'Monte Carlo net-worth projection with uncertainty bands',
-  transactions: 'Every transaction across your accounts',
+  transactions: 'Transactions, trends over time, and statement imports',
 }
 
 const ICONS: Record<Tab, React.ReactNode> = {
@@ -54,7 +55,9 @@ const ICONS: Record<Tab, React.ReactNode> = {
   ),
 }
 
-function TopNav({ tab, setTab, onLogout }: { tab: Tab; setTab: (t: Tab) => void; onLogout: () => void }) {
+function TopNav({
+  tab, setTab, onLogout, onUpdate,
+}: { tab: Tab; setTab: (t: Tab) => void; onLogout: () => void; onUpdate: () => void }) {
   const { display, setDisplay, privacy, setPrivacy } = useCurrency()
   return (
     <header className="topnav">
@@ -68,6 +71,12 @@ function TopNav({ tab, setTab, onLogout }: { tab: Tab; setTab: (t: Tab) => void;
         ))}
       </nav>
       <div className="topnav-tools">
+        <button className="update-btn" onClick={onUpdate} title="Update balances and transactions">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span className="label">Update</span>
+        </button>
         <div className="segmented">
           {(['CLP', 'EUR'] as const).map((c) => (
             <button key={c} className={display === c ? 'active' : ''} onClick={() => setDisplay(c)}>
@@ -140,6 +149,7 @@ function Header({ tab }: { tab: Tab }) {
 export function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [intent, setIntent] = useState<NavIntent | null>(null)
+  const [updating, setUpdating] = useState(false)
   const go = (t: Tab, i?: NavIntent) => {
     setIntent(i ?? null)
     setTab(t)
@@ -163,7 +173,7 @@ export function App() {
     <CurrencyProvider>
       <NavContext.Provider value={{ go, intent }}>
       <div className="app-shell">
-        <TopNav tab={tab} setTab={(t) => go(t)} onLogout={handleLogout} />
+        <TopNav tab={tab} setTab={(t) => go(t)} onLogout={handleLogout} onUpdate={() => setUpdating(true)} />
         <main className="main">
           <div className="content">
             <Header tab={tab} />
@@ -176,6 +186,7 @@ export function App() {
           </div>
         </main>
       </div>
+      {updating && <UpdatePanel onClose={() => setUpdating(false)} />}
       </NavContext.Provider>
     </CurrencyProvider>
   )

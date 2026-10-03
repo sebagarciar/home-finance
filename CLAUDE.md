@@ -105,6 +105,22 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 - Aggregates are net per category (signed-base sum). Categories with a negative net are **still shown** — they're a signal that something is miscategorized or the date window is wrong, not noise to hide.
 - Categories flagged **`is_income`** (`Category.is_income`; seeded: Salary) are excluded from the spending series; their positive inflows feed `by_month_income`. The flag — not the category name — drives the split, so renames are safe. Income categories are assigned manually (no auto-detection).
 
+## Screen layout
+
+- **Overview** answers "are we OK?". It holds:
+  - Needs attention
+  - net worth by type, with a **Cash runway** tile (cash ÷ avg spend of the last ≤6 *complete* months)
+  - this month's spending, shown **once**, compared with the usual pace by today's date
+  - Total, with currency exposure
+  - recent activity
+
+  Don't re-add monthly history here.
+- **Spending** (nav key `transactions`) has sub-tabs:
+  - Transactions
+  - **Trends**: [pages/Trends.tsx](frontend/src/pages/Trends.tsx), with cash flow, the stacked monthly bar and the category × month table
+  - Import
+- **"+ Update"** in the top nav opens [components/UpdatePanel.tsx](frontend/src/components/UpdatePanel.tsx): every tracked account's balance in one form (with age; same skip rule as the attention check), Sync email, and a link to Import.
+
 ## Net-worth model (Phase 5)
 
 - **Cash is NEVER derived from transaction sums.** Each account has a manual
@@ -198,7 +214,7 @@ A card at the top of Overview lists computed signals that the data has gone stal
 Roadmap after the Oct 2026 product review (full write-up: `~/.claude/plans/i-want-you-to-zazzy-valley.md`). The theme: fewer inputs and screens, and more derived from data that already exists.
 
 1. ~~Needs attention~~: shipped (section above).
-2. **Slim Overview.** Show the month's spend once. Move the stacked bar and category × month table to a Spending view. Add a global "+ Update" button: import statement, sync email, update all balances.
+2. ~~Slim Overview~~: shipped (see "Screen layout").
 3. **One household profile.** Income, spend and big expenses are duplicated across Assumptions and the Health questionnaire. Derive spend, cash and current allocation from data; store only what the data can't tell (target allocation, risk answers, planned big expenses). Cut the Portfolio Health Review down to a few plain checks, with no composite score. Its Stages 2–4 are frozen.
 4. **Goal-based forecast.** Amount + date → probability. Default horizon 5–10 years, with expert settings (ρ, σ, FX drift) behind "Advanced".
 

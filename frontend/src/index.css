@@ -155,10 +155,66 @@ input:focus, select:focus {
 .icon-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
 .icon-btn.active { color: var(--accent); background: var(--accent-bg); }
 .logout-link:hover { color: var(--negative-text); background: var(--negative-bg); }
+.update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14px;
+  font-weight: 500;
+}
+.update-btn:hover { background: var(--accent-hover); }
 @media (max-width: 960px) {
   .topnav { padding: 0 16px; gap: 12px; }
-  .nav-link .label, .brand .label { display: none; }
+  .nav-link .label, .brand .label, .update-btn .label { display: none; }
+  .update-btn { width: 40px; padding: 0; justify-content: center; }
 }
+
+/* ── "+ Update" slide-over ─────────────────────────────────── */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(29, 31, 38, 0.35);
+  display: flex;
+  justify-content: flex-end;
+}
+.sheet {
+  width: min(440px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--surface-border);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.sheet-header { display: flex; justify-content: space-between; align-items: center; }
+.sheet-section { display: flex; flex-direction: column; gap: 10px; }
+.sheet-section h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.sheet-section p { margin: 0; }
+.sheet-balances { display: flex; flex-direction: column; }
+.sheet-balance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--surface-divider);
+}
+.sheet-balance-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.sheet-balance-name .muted, .sheet-balance-name .stale { font-size: 12px; }
+.sheet-balance-name .stale { color: var(--pending-text); }
+.sheet-balance-input { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sheet-balance-input input { width: 120px; padding: 6px 8px; font-size: 13px; text-align: right; }
+.sheet-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 12px; }
+.sheet-actions.start { justify-content: flex-start; padding-top: 0; }
+.sheet .form-error { color: var(--negative-text); font-size: 12px; padding-top: 8px; }
 
 .main {
   display: flex;
@@ -909,15 +965,8 @@ button.tag { cursor: pointer; border: none; }
 .preview-table tr:last-child td { border-bottom: none; }
 .preview-table tr.is-dup td { background: var(--pending-bg); }
 
-/* ── Household health strip ────────────────────────────────── */
-.health-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1.4fr;
-  gap: 20px;
-  align-items: start;
-}
-.health-metric { display: flex; flex-direction: column; gap: 6px; }
-.health-sub { font-size: 12px; color: var(--text-muted); }
+/* ── Currency exposure bar (Overview → Total) ─────────────── */
+.health-sub { font-size: 12px; color: var(--text-muted); }  /* Forecast tile captions */
 .exposure-bar {
   display: flex;
   height: 10px;
@@ -937,9 +986,6 @@ button.tag { cursor: pointer; border: none; }
   color: var(--text-secondary);
 }
 .exposure-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
-@media (max-width: 900px) {
-  .health-grid { grid-template-columns: 1fr; gap: 16px; }
-}
 
 /* ── Category × month matrix table ─────────────────────────── */
 .matrix-scroll { overflow-x: auto; margin-top: 8px; }
@@ -1276,6 +1322,8 @@ button.tag { cursor: pointer; border: none; }
 .panel-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 15px; }
 .panel-row dt { color: var(--text-muted); }
 .panel-row dd { margin: 0; font-size: 16px; }
+.panel-exposure { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--surface-border); display: grid; gap: 8px; }
+.panel-exposure-label { font-size: 13px; color: var(--text-muted); }
 
 .catbar { display: flex; height: 12px; border-radius: var(--radius-pill); overflow: hidden; gap: 3px; margin-top: 20px; }
 .cat-legend {

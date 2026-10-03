@@ -7,11 +7,14 @@ import { categoryStyle, categoryColorHex } from '../design/categories'
 import { PageLoading } from '../components/PageLoading'
 import { useNav } from '../lib/nav'
 
-// Import flow is its own chunk — only fetched when the sub-tab is opened.
+// Import and Trends are their own chunks — only fetched when the sub-tab is opened.
 const Import = lazy(() => import('./Import').then((m) => ({ default: m.Import })))
+const Trends = lazy(() => import('./Trends').then((m) => ({ default: m.Trends })))
 
 type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
-type View = 'transactions' | 'import'
+type View = 'transactions' | 'trends' | 'import'
+
+const VIEW_LABEL: Record<View, string> = { transactions: 'Transactions', trends: 'Trends', import: 'Import' }
 
 export function Transactions() {
   const { intent } = useNav()
@@ -19,13 +22,13 @@ export function Transactions() {
   return (
     <>
       <div className="subtabs">
-        {(['transactions', 'import'] as const).map((v) => (
+        {(Object.keys(VIEW_LABEL) as View[]).map((v) => (
           <button
             key={v}
             className={`subtab${view === v ? ' active' : ''}`}
             onClick={() => setView(v)}
           >
-            {v === 'transactions' ? 'Transactions' : 'Import'}
+            {VIEW_LABEL[v]}
           </button>
         ))}
       </div>
@@ -33,7 +36,7 @@ export function Transactions() {
         <TransactionsView />
       ) : (
         <Suspense fallback={<PageLoading />}>
-          <Import />
+          {view === 'trends' ? <Trends /> : <Import />}
         </Suspense>
       )}
     </>
