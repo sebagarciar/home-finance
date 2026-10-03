@@ -4,11 +4,17 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid,
 } from 'recharts'
-import { api, type Account, type AccountType, type FintualFund, type Holding } from '../api/client'
 import {
-  useNetworthCurrent, useNetworthHistory, useHoldings, useAccounts,
+  api, type Account, type AccountType, type FintualFund, type Holding, type HoldingPerformance,
+  type Performance,
+} from '../api/client'
+import {
+  useNetworthCurrent, useNetworthHistory, useHoldings, useAccounts, usePerformance,
 } from '../api/hooks'
 import { useCurrency } from '../lib/currency'
+import { fmtNative, fmtPct, fmtQty, shortDate } from '../lib/format'
+import { TradesModal } from '../components/TradesModal'
+import { ISSUE_TEXT } from '../lib/performance'
 import { chart } from '../design/chartTheme'
 import { MoneyTooltip } from '../components/MoneyTooltip'
 import { PageLoading } from '../components/PageLoading'
@@ -56,6 +62,7 @@ function PortfolioOverview() {
   const historyQ = useNetworthHistory()
   const holdingsQ = useHoldings()
   const accountsQ = useAccounts()
+  const performanceQ = usePerformance()
 
   const networth = networthQ.data ?? null
   const history = historyQ.data ?? []
@@ -66,6 +73,13 @@ function PortfolioOverview() {
   const [showAdd, setShowAdd] = useState(false)
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [basisFor, setBasisFor] = useState<Holding | null>(null)
+
+  const performance = performanceQ.data ?? null
+  const perfById = useMemo(
+    () => new Map((performance?.holdings ?? []).map((p) => [p.holding_id, p])),
+    [performance],
+  )
 
   // Any write touches several of these; invalidating all is cheap and keeps the
   // page consistent (net worth depends on accounts + holdings + prices).
@@ -219,7 +233,7 @@ function PortfolioOverview() {
                     </span>
                   </span>
                   <span className="muted">{a.type}</span>
-                  <span className="num num-col" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                  <span className="num num-col num-stack">
                     <span>{mask(fmtNative(a.current_balance, a.native_currency))}</span>
                     <span className="muted" style={{ fontSize: 11 }}>{format(cashBase)}</span>
                   </span>
@@ -286,6 +300,8 @@ function PortfolioOverview() {
           />
         )}
 
+        {performance && <PerformanceTiles performance={performance} />}
+
         {holdings.length > 0 && (
           <div className="holdings-table">
             <div className="holdings-head">
@@ -294,6 +310,7 @@ function PortfolioOverview() {
               <span className="num-col">Quantity</span>
               <span className="num-col">Price</span>
               <span className="num-col">Value</span>
+              <span className="num-col">Gain</span>
               <span />
             </div>
             {holdings.map((h) => editingId === h.id ? (
@@ -316,7 +333,7 @@ function PortfolioOverview() {
                 </span>
                 <span className="muted">{accountById[h.account_id]?.name ?? '—'}</span>
                 <span className="num num-col">{mask(fmtQty(h.quantity))}</span>
-                <span className="num num-col" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span className="num num-col num-stack">
                   <span>
                     {mask(fmtNative(h.price, h.price_currency))}
                   </span>
@@ -333,7 +350,15 @@ function PortfolioOverview() {
                   )}
                 </span>
                 <span className="num num-col">{format(Number(h.value_in_base))}</span>
+                <GainCell perf={perfById.get(h.id)} onOpen={() => setBasisFor(h)} />
                 <span className="holding-actions">
+                  <button
+                    className="link-btn"
+                    onClick={() => setBasisFor(h)}
+                    title="Cost basis and trades"
+                  >
+                    basis
+                  </button>
                   <button
                     className="link-btn"
                     onClick={() => setEditingId(h.id)}
@@ -361,7 +386,131 @@ function PortfolioOverview() {
           </div>
         )}
       </div>
+
+      {basisFor && (
+        <TradesModal
+          holding={basisFor}
+          perf={perfById.get(basisFor.id)}
+          onClose={() => setBasisFor(null)}
+        />
+      )}
     </>
+  )
+}
+
+// Portfolio-level basis + return. Totals cover only holdings whose ledger
+// reconciles with their quantity, so the coverage share is always stated.
+function PerformanceTiles({ performance }: { performance: Performance }) {
+  const { format } = useCurrency()
+  const t = performance.totals
+  const coverage = t.coverage_pct
+  if (!performance.holdings.some((h) => h.has_basis)) {
+    return (
+      <div className="perf-hint muted">
+        Add a cost basis to a holding (<strong>basis</strong>) to see what you paid, your gain,
+        and how much of it came from the currency.
+      </div>
+    )
+  }
+  if (!coverage) {
+    return (
+      <div className="perf-hint muted">
+        No holding has a reconciled cost basis yet: each ledger's units must match the holding's quantity.
+      </div>
+    )
+  }
+  const unrealized = Number(t.unrealized_base)
+  const realized = Number(t.realized_base) + Number(t.income_base) - Number(t.fees_base)
+  return (
+    <>
+      <div className="perf-tiles">
+        <PerfTile label="Invested" value={format(Number(t.cost_base))} />
+        <PerfTile
+          label="Unrealized gain"
+          value={format(unrealized)}
+          tone={Math.sign(unrealized)}
+          sub={`asset ${format(Number(t.price_effect))} · FX ${format(Number(t.fx_effect))}`}
+        />
+        <PerfTile
+          label="Realized + income"
+          value={format(realized)}
+          tone={Math.sign(realized)}
+          sub="sells, dividends, net of fees"
+        />
+        <PerfTile
+          label="Return"
+          value={t.return != null ? fmtPct(t.return) : '—'}
+          tone={t.return != null ? Math.sign(t.return) : 0}
+          sub={t.return != null ? (t.annualized ? 'money-weighted, per year' : 'money-weighted, total') : undefined}
+        />
+      </div>
+      {coverage < 0.999 && (
+        <div className="perf-hint muted">
+          Covers {Math.round(coverage * 100)}% of holdings value. The rest has no basis or a ledger that
+          doesn't match its quantity.
+        </div>
+      )}
+    </>
+  )
+}
+
+function PerfTile({ label, value, sub, tone = 0 }: { label: string; value: string; sub?: string; tone?: number }) {
+  const color = tone > 0 ? 'var(--positive-text)' : tone < 0 ? 'var(--negative-text)' : undefined
+  return (
+    <div className="networth-tile">
+      <div className="tile-label">{label}</div>
+      <div className="tile-value num" style={{ color }}>{value}</div>
+      {sub && <div className="muted" style={{ fontSize: 12 }}>{sub}</div>}
+    </div>
+  )
+}
+
+const ISSUE_TAG: Record<string, string> = {
+  qty_mismatch: 'units differ',
+  currency_mismatch: 'currency',
+  missing_price: 'no price',
+  ledger_error: 'ledger error',
+}
+
+function GainCell({ perf, onOpen }: { perf: HoldingPerformance | undefined; onOpen: () => void }) {
+  const { format, mask } = useCurrency()
+  if (!perf) return <span className="num num-col muted">—</span>
+  if (perf.issue === 'no_trades') {
+    return (
+      <span className="num-col">
+        <button className="link-btn" onClick={onOpen}>add basis</button>
+      </span>
+    )
+  }
+  if (perf.issue || perf.unrealized_base == null) {
+    return (
+      <span className="num-col">
+        <button
+          className="tag tag-warn"
+          onClick={onOpen}
+          title={perf.issue ? ISSUE_TEXT[perf.issue] : undefined}
+        >
+          {perf.issue === 'qty_mismatch'
+            ? `${mask(fmtQty(perf.ledger_qty))} vs ${mask(fmtQty(perf.holding_qty))} units`
+            : ISSUE_TAG[perf.issue ?? ''] ?? 'unavailable'}
+        </button>
+      </span>
+    )
+  }
+  const gain = Number(perf.unrealized_base)
+  const tone = gain > 0 ? 'var(--positive-text)' : gain < 0 ? 'var(--negative-text)' : undefined
+  return (
+    <span
+      className="num num-col num-stack"
+      title={`Asset ${format(Number(perf.price_effect))} · FX ${format(Number(perf.fx_effect))}`}
+    >
+      <span style={{ color: tone }}>{format(gain)}</span>
+      {perf.return != null && (
+        <span className="muted" style={{ fontSize: 11 }}>
+          {fmtPct(perf.return)}{perf.annualized ? '/yr' : ''}
+        </span>
+      )}
+    </span>
   )
 }
 
@@ -635,27 +784,4 @@ function PortfolioSkeleton() {
       </div>
     </>
   )
-}
-
-function fmtQty(q: string) {
-  const n = Number(q)
-  if (!Number.isFinite(n)) return q
-  return n.toLocaleString('es-CL', { maximumFractionDigits: 4 })
-}
-
-function fmtNative(amount: string, currency: string) {
-  const n = Number(amount)
-  if (!Number.isFinite(n)) return amount
-  // CLP has no minor unit in practice — render whole pesos. Other currencies
-  // get standard 2dp (and up to 4 for tiny crypto-like fractions).
-  const opts =
-    currency === 'CLP'
-      ? { maximumFractionDigits: 0 }
-      : { minimumFractionDigits: 2, maximumFractionDigits: 4 }
-  return `${n.toLocaleString('es-CL', opts)} ${currency}`
-}
-
-function shortDate(iso: string) {
-  const d = new Date(`${iso}T00:00:00`)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }

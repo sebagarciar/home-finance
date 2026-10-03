@@ -19,6 +19,8 @@ export const queryKeys = {
   networthCurrent: () => ['networth', 'current'] as const,
   networthHistory: () => ['networth', 'history'] as const,
   holdings: () => ['holdings'] as const,
+  trades: (holdingId: number) => ['trades', holdingId] as const,
+  performance: () => ['performance'] as const,
   accounts: () => ['accounts'] as const,
   categories: () => ['categories'] as const,
   transactions: (params: TxnParams) => ['transactions', params] as const,
@@ -66,6 +68,17 @@ export function useNetworthHistory() {
 
 export function useHoldings() {
   return useQuery({ queryKey: queryKeys.holdings(), queryFn: () => api.holdings.list() })
+}
+
+export function useTrades(holdingId: number) {
+  return useQuery({
+    queryKey: queryKeys.trades(holdingId),
+    queryFn: () => api.trades.list(holdingId),
+  })
+}
+
+export function usePerformance() {
+  return useQuery({ queryKey: queryKeys.performance(), queryFn: () => api.performance() })
 }
 
 export function useAccounts() {

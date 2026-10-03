@@ -2,7 +2,7 @@
 
 Personal finance app for a two-person household spanning Spain (EUR) and Chile (CLP), with USD-priced holdings. Manual data entry only (no bank APIs). Tax is out of scope.
 
-Build plan: `~/.claude/plans/build-spec-household-stateless-wren.md`. Phases 1–7 done; Phase 8 (debt stub) is next.
+Build plan: `~/.claude/plans/build-spec-household-stateless-wren.md`. Phases 1–7 done, plus cost basis / performance. The roadmap was re-prioritized after a product review (see "What's next"); Phase 8 (debt stub) is deprioritized.
 
 ## Repo layout
 
@@ -145,6 +145,7 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 - Frontend API client: [frontend/src/api/client.ts](frontend/src/api/client.ts)
 - Frontend query hooks: [frontend/src/api/hooks.ts](frontend/src/api/hooks.ts) (TanStack Query — use these from pages, not raw `useEffect + fetch`)
 - Price providers: [backend/app/services/prices/](backend/app/services/prices/) — `provider.py` (composite + yfinance), `fintual.py` (Fintual API + name search), `valuation.py`
+- Cost basis / performance: [backend/app/services/performance/](backend/app/services/performance/) (`basis.py` replay, `attribution.py` asset-vs-FX split, `returns.py` XIRR, `service.py`); UI in [frontend/src/components/TradesModal.tsx](frontend/src/components/TradesModal.tsx) + Portfolio page
 - Forecast engine: [backend/app/services/forecast/](backend/app/services/forecast/) — `blocks.py` (return sourcing + block bootstrap + `shock_mask`), `engine.py` (`run_forecast`). Endpoint `POST /forecast/run` in [backend/app/routers/forecast.py](backend/app/routers/forecast.py); UI in [frontend/src/pages/Forecast.tsx](frontend/src/pages/Forecast.tsx).
 
 ## Forecast model (Phase 6)
@@ -161,9 +162,37 @@ Enum on `transactions.txn_type`: `card_payment | transfer | deposit | refund | d
 
 `GET/PUT /assumptions` ([backend/app/routers/assumptions.py](backend/app/routers/assumptions.py)) over the single seeded row; PUT is a partial update (only sent fields change), validates ranges, upper-cases currencies, and rejects negative allocations. UI in [frontend/src/pages/Assumptions.tsx](frontend/src/pages/Assumptions.tsx), rendered as an in-page sub-tab of the Forecast page (no separate sidebar entry — the `Forecast` wrapper in [frontend/src/pages/Forecast.tsx](frontend/src/pages/Forecast.tsx) switches Forecast ↔ Assumptions): sectioned form (income / spending / returns+allocation / forecast params), money fields with a currency select, rates shown as %. Saving invalidates the `['forecast']` query so the Forecast page recomputes. **"Use my avg" links** fill income/spending from the last ≤12 statemented months (`useSpendingSummary`) — the bridge between the (intentionally forecast-excluded) transaction history and the manual assumption inputs.
 
+## Cost basis & performance
+
+Plan: [docs/plans/cost-basis.md](docs/plans/cost-basis.md).
+
+- **`Holding.quantity` stays manual.** The `investment_trades` ledger (`opening | buy | sell | dividend | fee`) only supplies basis. If the ledger's units don't match the holding's quantity, gains and return are **hidden**, not guessed. Same reasoning as manual cash balances.
+- **Average cost.** Trades store native amounts plus `fx_rate_to_base` captured at the trade date (via `to_base`). Every write replays the whole ledger, so an oversell is rejected with a 422.
+- **Gain split.** Unrealized gain = `price_effect` (the asset moved, at today's FX) + `fx_effect` (the currency moved). CLP holdings always have `fx_effect = 0`.
+- **Return** is money-weighted (XIRR). Periods under a year are cumulative, with `annualized=false`.
+- Backend: [services/performance/](backend/app/services/performance/), `GET /performance`, trades CRUD under `/holdings/{id}/trades` and `/trades/{id}`.
+- UI on Portfolio → Overview:
+  - Holdings card: four tiles (invested / unrealized with asset·FX split / realized + income / return), with a coverage note when only part of the portfolio has a reconciled basis.
+  - Holdings table: a Gain column.
+  - Per-holding trades modal: [components/TradesModal.tsx](frontend/src/components/TradesModal.tsx). It opens as "Set starting position" when the ledger is empty.
+
 ## What's next
 
-**Phase 8 — debt stub.** Extend account types with `debt` (already in the enum) and add a `debt_terms` table (balance, rate, term_months, start_date, amortization JSON). Migration + surface balance in net-worth; no UI beyond that.
+Roadmap after the Oct 2026 product review (full write-up: `~/.claude/plans/i-want-you-to-zazzy-valley.md`). The theme: fewer inputs and screens, and more derived from data that already exists.
+
+1. **Needs attention / close the month** at the top of Overview. Computed only:
+   - balances not updated in about 30 days
+   - months with email rows but no statement
+   - count of rows in `Other`
+   - likely own-account transfer pairs (suggest only, never auto-archive)
+   - stale manual prices
+2. **Slim Overview.** Show the month's spend once. Move the stacked bar and category × month table to a Spending view. Add a global "+ Update" button: import statement, sync email, update all balances.
+3. **One household profile.** Income, spend and big expenses are duplicated across Assumptions and the Health questionnaire. Derive spend, cash and current allocation from data; store only what the data can't tell (target allocation, risk answers, planned big expenses). Cut the Portfolio Health Review down to a few plain checks, with no composite score. Its Stages 2–4 are frozen.
+4. **Goal-based forecast.** Amount + date → probability. Default horizon 5–10 years, with expert settings (ρ, σ, FX drift) behind "Advanced".
+
+Decided: **no per-person (mine / yours / shared) split.** The household is one pooled view.
+
+Deprioritized: **Phase 8 — debt stub** (`debt_terms` table + amortization). Debt is small, and `current_balance` already covers net worth.
 
 Phase 6 shipped: `services/forecast/` (block-bootstrap sampler over VT/AGG with parametric fallback, correlated ρ shocks, real/nominal, FX drift, life-event lumps), `POST /forecast/run`, and the Forecast page (fan chart with P10–P90 / P25–P75 bands + median, target-probability tile, horizon/terms/target controls). Three spec tests + an endpoint smoke test in `tests/test_forecast.py`.
 

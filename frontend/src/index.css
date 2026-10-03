@@ -627,15 +627,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 .emphasis .tile-value { font-size: 28px; }
 
+/* One grid for the whole table; head and rows are subgrids, so the
+   content-sized actions column is shared and every row lines up. */
 .holdings-table {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1.3fr 1.1fr 0.9fr 1.3fr 1.1fr 1.1fr max-content;
+  column-gap: 14px;
   margin-top: 8px;
 }
+.holdings-table > * { grid-column: 1 / -1; }
 .holdings-head, .holdings-row {
   display: grid;
-  grid-template-columns: 1.3fr 1.2fr 1fr 1.4fr 1.2fr max-content;
-  gap: 14px;
+  grid-template-columns: subgrid;
   align-items: center;
   padding: 12px 12px;
 }
@@ -655,6 +658,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .holdings-row:hover { background: var(--surface-raised); border-radius: var(--radius-md); }
 
 .num-col { text-align: right; justify-self: end; }
+/* Stacked right-aligned cell (value + sub-line). A class, not an inline style,
+   so the narrow-layout `display: none` rules can still hide it. */
+.num-stack { display: flex; flex-direction: column; align-items: flex-end; }
 .holdings-head .num-col { text-align: right; }
 
 .holding-ticker {
@@ -689,6 +695,82 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .tag-info { background: var(--pending-bg); color: var(--pending-text); }
 .tag-warn { background: var(--negative-bg); color: var(--negative-text); }
 
+button.tag { cursor: pointer; border: none; }
+
+/* ── Cost basis / performance ──────────────────────────────── */
+.perf-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 4px 0 8px;
+}
+@media (max-width: 900px) { .perf-tiles { grid-template-columns: 1fr 1fr; } }
+.perf-hint { font-size: 12px; margin: 4px 0 8px; }
+
+.modal.wide { max-width: 760px; max-height: calc(100vh - 40px); overflow-y: auto; }
+.basis-summary { display: flex; flex-direction: column; gap: 10px; }
+.basis-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+}
+@media (max-width: 720px) { .basis-stats { grid-template-columns: 1fr 1fr; } }
+.basis-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.basis-issue { font-size: 12px; color: var(--text-muted); }
+.basis-issue.warn { color: var(--pending-text); }
+
+.ledger-table { display: flex; flex-direction: column; }
+.ledger-head, .ledger-row {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr 0.8fr 1fr 1.1fr max-content;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.ledger-head {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--surface-border);
+}
+.ledger-row { border-bottom: 1px solid var(--surface-divider); }
+.ledger-row.active { background: var(--accent-bg); border-radius: var(--radius-md); }
+@media (max-width: 720px) {
+  .ledger-head, .ledger-row { grid-template-columns: 1fr 1fr 1fr max-content; }
+  .ledger-head > :nth-child(3), .ledger-row > :nth-child(3),
+  .ledger-head > :nth-child(4), .ledger-row > :nth-child(4) { display: none; }
+}
+
+.trade-form {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+@media (max-width: 720px) { .trade-form { grid-template-columns: 1fr 1fr; } }
+.trade-form-title { grid-column: 1 / -1; font-size: 13px; font-weight: 600; }
+.trade-form .trade-note, .trade-form .form-error, .trade-form .trade-actions { grid-column: 1 / -1; }
+.trade-form .form-error { color: var(--negative-text); font-size: 12px; }
+.trade-form .trade-actions { margin-top: 0; }
+.mode-switch { display: inline-flex; gap: 4px; }
+.mode-switch button {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+}
+.mode-switch button.active { color: var(--text-primary); background: var(--surface-raised); }
+
 .link-btn {
   font-size: 12px;
   color: var(--text-muted);
@@ -718,19 +800,23 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (max-width: 1100px) {
   .add-holding { grid-template-columns: 1fr 1fr; }
   .add-holding .form-error { grid-column: 1 / -1; }
-  /* Keep ticker, value and actions; drop account, quantity, price. */
-  .holdings-head, .holdings-row {
-    grid-template-columns: 1fr 1fr max-content;
-  }
+  /* Keep ticker, value, gain and actions; drop account, quantity, price. */
+  .holdings-table { grid-template-columns: 1fr 1fr 1fr max-content; }
   .holdings-head > :nth-child(n+2):nth-child(-n+4),
   .holdings-row > :nth-child(n+2):nth-child(-n+4) { display: none; }
 }
 
-.balances-table { display: flex; flex-direction: column; margin-top: 8px; }
+/* Shared grid + subgrid rows, like .holdings-table. */
+.balances-table {
+  display: grid;
+  grid-template-columns: 1.4fr 0.7fr 1.3fr 1fr 1.1fr max-content;
+  column-gap: 14px;
+  margin-top: 8px;
+}
+.balances-table > * { grid-column: 1 / -1; }
 .balances-head, .balances-row {
   display: grid;
-  grid-template-columns: 1.4fr 0.7fr 1.3fr 1fr 1.1fr 90px;
-  gap: 14px;
+  grid-template-columns: subgrid;
   align-items: center;
   padding: 12px;
 }
@@ -750,7 +836,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .balances-row:hover { background: var(--surface-raised); border-radius: var(--radius-md); }
 @media (max-width: 900px) {
   /* Keep account, total and actions; drop type, cash, holdings. */
-  .balances-head, .balances-row { grid-template-columns: 1fr 1fr max-content; }
+  .balances-table { grid-template-columns: 1fr 1fr max-content; }
   .balances-head > :nth-child(n+2):nth-child(-n+4),
   .balances-row > :nth-child(n+2):nth-child(-n+4) { display: none; }
 }

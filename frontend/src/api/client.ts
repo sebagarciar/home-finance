@@ -122,6 +122,87 @@ export interface Holding {
   value_in_base: string;
 }
 
+export type TradeKind = "opening" | "buy" | "sell" | "dividend" | "fee";
+
+/** One cost-basis ledger row. Amounts are native (`currency` = holding's price currency). */
+export interface Trade {
+  id: number;
+  holding_id: number;
+  date: string;
+  kind: TradeKind;
+  quantity: string;
+  price: string;
+  amount: string;
+  fees: string;
+  currency: string;
+  fx_rate_to_base: string;
+  note: string | null;
+}
+
+/** Unit trades (opening/buy/sell) take price + exactly one of quantity|amount;
+ *  dividend/fee take amount only. */
+export interface TradeInput {
+  date: string;
+  kind: TradeKind;
+  quantity?: string | null;
+  price?: string | null;
+  amount?: string | null;
+  fees?: string;
+  note?: string | null;
+}
+
+/** Why gains/return are suppressed for a holding. */
+export type PerformanceIssue =
+  | "no_trades"
+  | "qty_mismatch"
+  | "currency_mismatch"
+  | "missing_price"
+  | "ledger_error";
+
+export interface HoldingPerformance {
+  holding_id: number;
+  ticker: string;
+  currency: string;
+  has_basis: boolean;
+  reconciled: boolean;
+  issue: PerformanceIssue | null;
+  ledger_qty: string;
+  holding_qty: string;
+  since: string | null;
+  avg_cost_native: string | null;
+  cost_native: string;
+  cost_base: string;
+  value_base: string | null;
+  unrealized_base: string | null;
+  price_effect: string | null;
+  fx_effect: string | null;
+  realized_base: string;
+  income_base: string;
+  fees_base: string;
+  /** Money-weighted return (XIRR) in base CLP; cumulative when `annualized` is false. */
+  return: number | null;
+  return_native: number | null;
+  annualized: boolean;
+}
+
+export interface Performance {
+  totals: {
+    cost_base: string;
+    value_base: string;
+    unrealized_base: string;
+    price_effect: string;
+    fx_effect: string;
+    realized_base: string;
+    income_base: string;
+    fees_base: string;
+    return: number | null;
+    annualized: boolean;
+    /** Share (0–1) of priced portfolio value with a reconciled basis; totals cover only that share. */
+    coverage_pct: number | null;
+  };
+  holdings: HoldingPerformance[];
+}
+
 export interface NetworthAccountRow {
   account_id: number;
   name: string;
@@ -563,6 +644,20 @@ export const api = {
       }),
     remove: (id: number) => request<void>(`/holdings/${id}`, { method: "DELETE" }),
   },
+
+  trades: {
+    list: (holdingId: number) => request<Trade[]>(`/holdings/${holdingId}/trades`),
+    create: (holdingId: number, payload: TradeInput) =>
+      request<Trade>(`/holdings/${holdingId}/trades`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    update: (id: number, payload: Partial<TradeInput>) =>
+      request<Trade>(`/trades/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    remove: (id: number) => request<void>(`/trades/${id}`, { method: "DELETE" }),
+  },
+
+  performance: () => request<Performance>("/performance"),
 
   networth: {
     current: () => request<NetworthCurrent>("/networth/current"),
