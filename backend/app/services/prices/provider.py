@@ -56,6 +56,10 @@ class YFinancePriceProvider(PriceProvider):
         except Exception as e:  # noqa: BLE001 — yfinance raises a zoo of errors
             raise PriceLookupError(f"yfinance fetch failed for {ticker}: {e}") from e
 
+        # Illiquid tickers (e.g. Chilean funds) often have a trailing row with a
+        # NaN close for a day with no trade; use the last real close instead.
+        if hist is not None:
+            hist = hist.dropna(subset=["Close"])
         if hist is None or hist.empty:
             raise PriceLookupError(f"yfinance returned no rows for {ticker}")
 
