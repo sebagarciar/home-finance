@@ -163,8 +163,8 @@ export function UpdatePanel({ onClose }: { onClose: () => void }) {
                 : syncStatus.last_run_at
                   ? `Last synced ${ago(syncStatus.last_run_at)}`
                   : 'Not synced yet'}
-              {syncStatus.scheduled
-                ? ` · auto every ${syncStatus.interval_minutes} min`
+              {syncStatus.scheduled_times.length > 0
+                ? ` · auto at ${syncStatus.scheduled_times.join(', ')}`
                 : ' · auto-sync off'}
             </p>
           )}

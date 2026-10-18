@@ -54,9 +54,10 @@ class Settings(BaseSettings):
     santander_email_sender: str = "SantanderInforma@emailing.bancosantander-mail.es"
     # Default Account that email rows post to (the Santander ES checking account).
     santander_email_account_id: int | None = None
-    # Background sync cadence in minutes; 0 disables it. Runs inside the backend
-    # process, so it only fires while the backend is up and the machine awake.
-    email_sync_interval_minutes: int = 0
+    # Background sync at fixed local times, comma-separated HH:MM (e.g. "12:00,16:00");
+    # empty disables it. Runs inside the backend process, so it needs the backend
+    # up and the machine awake — a slot missed while asleep/off runs on the next wake.
+    email_sync_times: str = ""
 
     # Auth — change these via .env in production
     app_username: str = "home"

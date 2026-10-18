@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_session
+from ..services.email_ingest.scheduler import parse_times
 from ..services.email_ingest.sync import (
     EmailSyncConfigError,
     get_status,
@@ -124,8 +125,9 @@ def email_status(db: Session = Depends(get_session)):
         return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).isoformat()
 
     return {
-        "scheduled": get_settings().email_sync_interval_minutes > 0,
-        "interval_minutes": get_settings().email_sync_interval_minutes,
+        "scheduled_times": [
+            t.strftime("%H:%M") for t in parse_times(get_settings().email_sync_times)
+        ],
         "last_run_at": _iso(st.last_run_at),
         "last_ok": st.last_ok,
         "last_error": st.last_error,

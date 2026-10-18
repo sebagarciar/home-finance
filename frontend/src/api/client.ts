@@ -421,8 +421,7 @@ export interface EmailSyncResult {
 }
 
 export interface EmailSyncStatus {
-  scheduled: boolean;
-  interval_minutes: number;
+  scheduled_times: string[];
   last_run_at: string | null;
   last_ok: boolean | null;
   last_error: string | null;

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -75,20 +75,46 @@ def test_run_email_sync_records_status(db, monkeypatch):
 
 
 def test_scheduler_disabled_by_default(monkeypatch):
-    monkeypatch.setattr(get_settings(), "email_sync_interval_minutes", 0)
+    monkeypatch.setattr(get_settings(), "email_sync_times", "")
     assert scheduler.start_email_sync() is None
+
+
+def _at(h, m=0, day=18):
+    return datetime(2026, 10, day, h, m).astimezone()
+
+
+def test_is_due_catches_up_missed_slots():
+    times = scheduler.parse_times("12:00, 16:00")
+    assert [t.hour for t in times] == [12, 16]
+    # Before the first slot of the day: yesterday's 16:00 is the latest slot.
+    assert not scheduler.is_due(_at(9), _at(16, 5, day=17), True, times)
+    assert scheduler.is_due(_at(9), _at(10, 0, day=17), True, times)
+    # 12:00 passed, last run was this morning -> due; ran after 12:00 -> not due.
+    assert scheduler.is_due(_at(12, 1), _at(8), True, times)
+    assert not scheduler.is_due(_at(12, 30), _at(12, 1), True, times)
+    # Mac was asleep through 12:00 and woke at 15:00 -> still due (catch-up).
+    assert scheduler.is_due(_at(15), _at(8), True, times)
+    # Never run -> due as soon as any slot has passed.
+    assert scheduler.is_due(_at(13), None, None, times)
+
+
+def test_is_due_retries_failures_after_backoff():
+    times = scheduler.parse_times("12:00")
+    assert not scheduler.is_due(_at(12, 10), _at(12, 1), False, times)
+    assert scheduler.is_due(_at(12, 20), _at(12, 1), False, times)
 
 
 def test_scheduled_run_records_failure_instead_of_raising(db, monkeypatch):
     acct = _setup(db)
     monkeypatch.setattr(scheduler, "resolve_account_id", lambda *a: acct.id)
+    monkeypatch.setattr(scheduler, "is_due", lambda *a: True)
     monkeypatch.setattr(scheduler, "SessionLocal", lambda: _Ctx(db))
 
     def _boom(*a, **k):
         raise RuntimeError("imap exploded")
 
     monkeypatch.setattr(scheduler, "run_email_sync", _boom)
-    scheduler._run_once()  # must not raise
+    scheduler._check_and_run([])  # must not raise
     st = db.get(EmailSyncStatus, 1)
     assert st.last_ok is False and "imap exploded" in st.last_error
 
