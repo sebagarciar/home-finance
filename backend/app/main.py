@@ -27,6 +27,7 @@ from .routers import (
     transactions,
 )
 from .seeds.defaults import seed
+from .services.email_ingest.scheduler import start_email_sync
 
 
 @asynccontextmanager
@@ -36,7 +37,10 @@ async def lifespan(app: FastAPI):
     upgrade_to_head()
     with SessionLocal() as db:
         seed(db)
+    sync_task = start_email_sync()
     yield
+    if sync_task is not None:
+        sync_task.cancel()
 
 
 def create_app() -> FastAPI:

@@ -22,6 +22,7 @@ export const queryKeys = {
   trades: (holdingId: number) => ['trades', holdingId] as const,
   performance: () => ['performance'] as const,
   attention: () => ['attention'] as const,
+  emailSyncStatus: () => ['import', 'emailStatus'] as const,
   accounts: () => ['accounts'] as const,
   categories: () => ['categories'] as const,
   transactions: (params: TxnParams) => ['transactions', params] as const,
@@ -36,6 +37,14 @@ interface SpendingParams {
   start?: string
   end?: string
   account_id?: number
+}
+
+export function useEmailSyncStatus() {
+  return useQuery({
+    queryKey: queryKeys.emailSyncStatus(),
+    queryFn: () => api.import.emailStatus(),
+    refetchInterval: 60_000,
+  })
 }
 
 export function useSpendingPace(throughDay: number) {

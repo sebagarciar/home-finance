@@ -242,11 +242,12 @@ def _make_client(monkeypatch, *, with_account: bool, creds: bool) -> TestClient:
     monkeypatch.setattr(settings, "gmail_app_password", "app-pw" if creds else None)
     monkeypatch.setattr(settings, "santander_email_account_id", 1 if with_account else None)
 
-    import app.routers.imports as imports_router
+    import app.services.email_ingest.sync as imports_router
     import app.services.importers.service as svc
 
     monkeypatch.setattr(svc, "to_base", lambda *a, **k: Decimal("1"))
     monkeypatch.setattr(svc, "classify", _stub_classify)
+    monkeypatch.setattr(imports_router, "classify", _stub_classify)
     _raw = _raw_email(
         "te informamos de que Trainline.com ha realizado una retención "
         "de 110.30 EUR en tu tarjeta terminada en 3653."
@@ -269,11 +270,11 @@ def test_email_sync_endpoint_imports_then_dedupes(monkeypatch):
 
     r1 = client.post("/import/email/sync")
     assert r1.status_code == 200, r1.text
-    assert r1.json() == {"fetched": 1, "parsed": 1, "imported": 1, "skipped": 0}
+    assert r1.json() == {"fetched": 1, "parsed": 1, "imported": 1, "skipped": 0, "recategorized": 0}
 
     # Second run re-reads the same email; dedup means nothing new is added.
     r2 = client.post("/import/email/sync")
-    assert r2.json() == {"fetched": 1, "parsed": 1, "imported": 0, "skipped": 1}
+    assert r2.json() == {"fetched": 1, "parsed": 1, "imported": 0, "skipped": 1, "recategorized": 0}
 
 
 def test_email_sync_503_without_credentials(monkeypatch):

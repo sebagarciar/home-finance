@@ -417,6 +417,17 @@ export interface EmailSyncResult {
   parsed: number;
   imported: number;
   skipped: number;
+  recategorized: number;
+}
+
+export interface EmailSyncStatus {
+  scheduled: boolean;
+  interval_minutes: number;
+  last_run_at: string | null;
+  last_ok: boolean | null;
+  last_error: string | null;
+  last_fetched: number;
+  last_imported: number;
 }
 
 export interface FintualFund {
@@ -693,6 +704,7 @@ export const api = {
       request<EmailSyncResult>(`/import/email/sync${qs({ account_id: accountId })}`, {
         method: "POST",
       }),
+    emailStatus: () => request<EmailSyncStatus>("/import/email/status"),
   },
 };
 

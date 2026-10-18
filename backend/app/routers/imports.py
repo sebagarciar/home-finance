@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import io
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_session
-from ..services.email_ingest import archive_santander_emails, fetch_santander_emails
+from ..services.email_ingest.sync import (
+    EmailSyncConfigError,
+    get_status,
+    resolve_account_id,
+    run_email_sync,
+)
 from ..services.importers import get_parser
-from ..services.importers.base import ParsedTxn
-from ..services.importers.santander_es_email import parse_santander_email
 from ..services.importers.service import commit_import, preview_import
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -95,29 +98,37 @@ def email_sync(
     """Pull Santander ES notification emails over IMAP and ingest the parseable
     ones as provisional (source="email") transactions. Idempotent: re-running
     only adds genuinely new rows. The monthly .xlsx statement supersedes these."""
-    settings = get_settings()
-    if not settings.gmail_user or not settings.gmail_app_password:
-        raise HTTPException(503, "Gmail credentials not configured (set GMAIL_USER / GMAIL_APP_PASSWORD)")
-
-    target_account = account_id if account_id is not None else settings.santander_email_account_id
-    if target_account is None:
-        raise HTTPException(400, "No account_id given and SANTANDER_EMAIL_ACCOUNT_ID is unset")
-
-    uid_raw_pairs = fetch_santander_emails(since=since, limit=limit)
-    parsed_pairs: list[tuple[str, ParsedTxn]] = [
-        (uid, p)
-        for uid, raw in uid_raw_pairs
-        if (p := parse_santander_email(raw)) is not None
-    ]
-    parsed_uids = [uid for uid, _ in parsed_pairs]
-    parsed_txns = [p for _, p in parsed_pairs]
-    previews = preview_import(db, target_account, parsed_txns)
-    result = commit_import(db, target_account, previews, source="email")
-    # Archive only emails that were parseable; leave unrecognised ones in INBOX.
-    archive_santander_emails(parsed_uids)
+    try:
+        target_account = resolve_account_id(account_id)
+    except EmailSyncConfigError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    r = run_email_sync(db, target_account, since=since, limit=limit)
     return {
-        "fetched": len(uid_raw_pairs),
-        "parsed": len(parsed_txns),
-        "imported": result.imported,
-        "skipped": result.duplicates_skipped,
+        "fetched": r.fetched,
+        "parsed": r.parsed,
+        "imported": r.imported,
+        "skipped": r.skipped,
+        "recategorized": r.recategorized,
+    }
+
+
+@router.get("/email/status")
+def email_status(db: Session = Depends(get_session)):
+    """Outcome of the latest email sync (scheduled or manual)."""
+    st = get_status(db)
+    db.commit()
+
+    def _iso(dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        return (dt if dt.tzinfo else dt.replace(tzinfo=UTC)).isoformat()
+
+    return {
+        "scheduled": get_settings().email_sync_interval_minutes > 0,
+        "interval_minutes": get_settings().email_sync_interval_minutes,
+        "last_run_at": _iso(st.last_run_at),
+        "last_ok": st.last_ok,
+        "last_error": st.last_error,
+        "last_fetched": st.last_fetched,
+        "last_imported": st.last_imported,
     }
