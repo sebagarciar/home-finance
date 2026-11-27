@@ -105,6 +105,7 @@ export function useCategories() {
 export interface TxnParams {
   search?: string
   category?: string
+  account_id?: number
   start?: string
   end?: string
   include_archived?: boolean
@@ -118,6 +119,7 @@ export function useTransactions(params: TxnParams) {
       api.transactions.list({
         search: params.search || undefined,
         category: params.category || undefined,
+        account_id: params.account_id || undefined,
         start: params.start || undefined,
         end: params.end || undefined,
         include_archived: params.include_archived || undefined,

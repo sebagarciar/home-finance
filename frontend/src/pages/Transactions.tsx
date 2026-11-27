@@ -52,6 +52,7 @@ function TransactionsView() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const { intent } = useNav()
   const [category, setCategory] = useState(intent?.category ?? '')
+  const [accountId, setAccountId] = useState<number | ''>(intent?.accountId ?? '')
   const [dateFrom, setDateFrom] = useState(intent?.start ?? '')
   const [dateTo, setDateTo] = useState('')
   const [sort, setSort] = useState<SortKey>('date_desc')
@@ -69,6 +70,7 @@ function TransactionsView() {
   const txnsQ = useTransactions({
     search: debouncedSearch || undefined,
     category: category || undefined,
+    account_id: accountId || undefined,
     start: dateFrom || undefined,
     end: dateTo || undefined,
     include_archived: showArchived || undefined,
@@ -90,6 +92,7 @@ function TransactionsView() {
       const { blob, filename } = await api.transactions.exportCsv({
         search: debouncedSearch || undefined,
         category: category || undefined,
+        account_id: accountId || undefined,
         start: dateFrom || undefined,
         end: dateTo || undefined,
         include_archived: showArchived || undefined,
@@ -146,6 +149,20 @@ function TransactionsView() {
               <option value="">All</option>
               {categories.map((c) => (
                 <option key={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Bank
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">All</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.institution ? `${a.institution} · ${a.name}` : a.name}
+                </option>
               ))}
             </select>
           </label>
