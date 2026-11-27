@@ -23,6 +23,7 @@ _TYPE_MAP = {
     "deposit": TxnType.deposit,
     "refund": TxnType.refund,
     "fee": TxnType.fee,
+    "charge": TxnType.fee,
     "exchange": TxnType.other,
     "topup": TxnType.deposit,
 }
@@ -47,7 +48,11 @@ class RevolutParser(Parser):
             except ValueError:
                 # Some Revolut variants use "YYYY-MM-DD HH:MM:SS"
                 txn_date = datetime.strptime(started[:19], "%Y-%m-%d %H:%M:%S").date()
-            amount = Decimal((row.get("Amount") or "0").strip())
+            # Revolut reports fees in a separate, positive `Fee` column; the
+            # running Balance moves by Amount − Fee (e.g. "Premium plan fee"
+            # rows are Amount 0.00, Fee 8.99).
+            fee = Decimal((row.get("Fee") or "0").strip() or "0")
+            amount = Decimal((row.get("Amount") or "0").strip()) - fee
             currency = (row.get("Currency") or "EUR").strip().upper()
             descr = (row.get("Description") or "").strip()
             raw_type = (row.get("Type") or "").strip().lower()
