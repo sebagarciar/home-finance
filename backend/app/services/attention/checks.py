@@ -74,6 +74,8 @@ def missing_statements(db: Session, today: date) -> list[Item]:
 
     A statement import archives the overlapping email rows, so a closed month
     that still has live email rows and no statement rows was never statemented.
+    Months covered by bank-sync rows count as complete: the bank's booked rows
+    are final, so leftover email rows there are not a missing-statement signal.
     The current month is skipped: its statement doesn't exist yet.
     """
     month_start = today.replace(day=1)
@@ -95,7 +97,7 @@ def missing_statements(db: Session, today: date) -> list[Item]:
         has_statement = db.execute(
             select(Transaction.id).where(
                 Transaction.account_id == account_id,
-                Transaction.source == "statement",
+                Transaction.source.in_(("statement", "bank_sync")),
                 Transaction.date >= start,
                 Transaction.date < end,
             ).limit(1)

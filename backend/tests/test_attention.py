@@ -129,6 +129,17 @@ def test_missing_statement_for_closed_email_only_month(db):
     ]
 
 
+def test_bank_sync_rows_count_as_month_coverage(db):
+    a = _account(db)
+    # leftover email row, but the bank's booked rows cover the month → not missing
+    _txn(db, a, date(2026, 8, 12), "-10", source="email")
+    _txn(db, a, date(2026, 8, 12), "-10", source="bank_sync")
+    # a month with email rows only is still flagged
+    _txn(db, a, date(2026, 7, 3), "-8", source="email")
+
+    assert [i.data["month"] for i in checks.missing_statements(db, TODAY)] == ["2026-07"]
+
+
 def test_missing_statement_handles_december(db):
     a = _account(db)
     _txn(db, a, date(2025, 12, 31), "-1", source="email")
